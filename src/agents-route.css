@@ -1,0 +1,21 @@
+/* ------------------------------------------------------------------
+   Which agent should take this? — the tray above the box, and the
+   name an agent signs its answer with.
+------------------------------------------------------------------ */
+
+.agr-tray { animation: rise 300ms var(--ease-out) backwards; }
+.agr-q .agb-q-top { padding-bottom: 8px; }
+.agr-opt { align-items: center; gap: 12px; padding: 8px 10px; }
+.agr-av { flex: none; width: 32px; height: 32px; border-radius: 9px; background: #F4F2ED; display: grid; place-items: center; }
+.agr-av svg { width: 24px; height: 24px; display: block; }
+.agr-opt.is-on .agr-av { background: #fff; box-shadow: 0 0 0 1px #E6E1D8; }
+.agr-t { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+.agr-t b { font-size: 13.5px; font-weight: 550; color: var(--text); }
+.agr-t span { font-size: 12.5px; color: var(--text-faint); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* an answer an agent gave, signed */
+.agr-by { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; font-size: 13px; }
+.agr-by-av { width: 24px; height: 24px; border-radius: 7px; background: #F4F2ED; display: grid; place-items: center; }
+.agr-by-av svg { width: 18px; height: 18px; display: block; }
+.agr-by b { font-weight: 550; color: var(--text); }
+.agr-by span:last-child { font-size: 11.5px; color: var(--text-faint); padding: 1px 6px; border-radius: 5px; background: #F4F2ED; }

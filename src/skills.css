@@ -1,0 +1,176 @@
+/* ================================================================
+   Skills (skills.js)
+   The list is the Playbooks table. A skill's page is its brief on the
+   left — when to use it, then numbered steps — and a details panel on
+   the right that opens onto runs and versions in place. Nothing boxed;
+   controls appear where you reach for them.
+================================================================ */
+
+/* the mark: the paper tile, with two sparks where the rules would be */
+.mx-tile--skill { display: grid; place-items: center; color: #A39E94; }
+.mx-tile--skill svg { width: 15px; height: 15px; display: block; }
+.pb-row:hover .mx-tile--skill { color: var(--text-soft); }
+
+/* ── the page ── */
+.sk-page { padding-bottom: 80px; container-type: inline-size; }
+/* one composition, centred: header, brief and panel share the same edges,
+   so a wide window gets even margins instead of a gap between brief and panel */
+.sk-page { max-width: 1120px; margin-left: auto !important; margin-right: auto !important; box-sizing: border-box; }
+.sk-run-ic { display: grid; margin-left: -2px; }
+.sk-run-ic svg { display: block; fill: currentColor; stroke: none; }
+.sk-grid { display: grid; grid-template-columns: minmax(0, 1fr) 320px; gap: 0 56px; align-items: start; margin-top: 22px; }
+@container (max-width: 720px) {
+  .sk-grid { grid-template-columns: minmax(0, 1fr); }
+  .sk-side { border-left: 0 !important; padding-left: 0 !important; margin-top: 36px; border-top: 1px solid var(--line-soft); padding-top: 22px; }
+}
+
+/* publish: a quiet button with a dot, only while there is something to publish */
+.sk-pub {
+  appearance: none; cursor: pointer;
+  display: inline-flex; align-items: center; gap: 8px;
+  height: 32px; padding: 0 12px; border-radius: 8px;
+  font: inherit; font-size: 13px; font-weight: 500; color: var(--text);
+  background: var(--surface); border: 1px solid var(--line);
+  box-shadow: 0 1px 1.5px rgba(26, 26, 24, .035);
+  transition: background var(--fast) var(--ease), border-color var(--fast) var(--ease);
+}
+.sk-pub[hidden] { display: none; }
+.sk-pub:hover { background: var(--tint); border-color: var(--line-strong); }
+.sk-pub:disabled { opacity: .5; cursor: default; background: var(--surface); border-color: var(--line); }
+.sk-pub-dot { width: 7px; height: 7px; border-radius: 50%; background: #C28A1E; }
+
+/* ── the brief ── */
+.sk-brief { min-width: 0; }
+.sk-when {
+  display: block; width: 100%; field-sizing: content; resize: none;
+  font-size: 15px !important; line-height: 1.6; color: var(--text-soft) !important;
+}
+.sk-when::placeholder { color: var(--text-faint); }
+.sk-steps-wrap { margin-top: 18px; }
+.sk-steps { margin: 0; padding: 0; list-style: none; }
+.sk-step { position: relative; display: flex; align-items: flex-start; gap: 12px; padding: 9px 34px 9px 0; border-top: 1px solid var(--line-soft); }
+.sk-step:first-child { border-top: 0; }
+.sk-n { flex: none; min-width: 20px; font-size: 14.5px; line-height: 1.6; color: var(--text-faint); font-variant-numeric: tabular-nums; }
+.sk-step-t { flex: 1; min-width: 0; outline: 0; font-size: 14.5px; line-height: 1.6; color: var(--text); white-space: pre-wrap; }
+.sk-step-t[contenteditable] { cursor: text; }
+.sk-step-t:empty::before { content: attr(data-ph); color: var(--text-faint); }
+/* a playbook, template or vault named in a step */
+.sk-ref {
+  color: var(--text); cursor: pointer;
+  text-decoration: underline; text-decoration-color: #CFCAC2; text-underline-offset: 3px;
+  transition: text-decoration-color var(--fast) var(--ease);
+}
+.sk-ref:hover { text-decoration-color: var(--text-soft); }
+.sk-step-t:focus .sk-ref { cursor: text; }
+
+/* a delete that waits on the right of its row */
+.sk-del { position: absolute; right: 0; top: 11px; opacity: 0; transition: opacity var(--fast) var(--ease); }
+.sk-step:hover .sk-del, .sk-step:focus-within .sk-del { opacity: 1; }
+.sk-del svg { width: 14px; height: 14px; display: block; }
+
+/* adds: underlined words, on hover of what they add to */
+.sk-add {
+  appearance: none; border: 0; background: none; cursor: pointer;
+  margin-top: 4px; padding: 2px 0; font: inherit; font-size: 13px; color: var(--text-soft);
+  text-decoration: underline; text-decoration-color: #D8D3CC; text-underline-offset: 3px;
+  opacity: 0; transition: opacity var(--fast) var(--ease), color var(--fast) var(--ease);
+}
+.sk-steps-wrap:hover .sk-add, .sk-d:hover .sk-add, .sk-add:focus-visible, .sk-add.is-on { opacity: 1; }
+.sk-add:hover { color: var(--text); text-decoration-color: var(--text-faint); }
+
+/* ── the details panel ── */
+.sk-side { position: sticky; top: 24px; border-left: 1px solid var(--line-soft); padding-left: 28px; min-width: 0; }
+.sk-details { display: flex; flex-direction: column; margin-top: -7px; }
+/* the panel's first line sits on the brief's first line */
+.sk-side > .sk-pane-head { margin-top: -4px; }
+.sk-d { display: grid; grid-template-columns: 100px minmax(0, 1fr); align-items: start; gap: 12px; padding: 7px 0; }
+.sk-d-l { font-size: 13px; line-height: 24px; color: var(--text-faint); }
+.sk-d-v { min-width: 0; display: flex; flex-direction: column; align-items: flex-start; gap: 4px; font-size: 13.5px; line-height: 24px; color: var(--text); }
+.sk-d-note { margin: -4px 0 4px 112px; font-size: 12.5px; line-height: 1.5; color: var(--text-faint); }
+.sk-faint { color: var(--text-faint); }
+.sk-val {
+  appearance: none; cursor: pointer; max-width: calc(100% + 14px);
+  display: inline-flex; align-items: center; gap: 7px;
+  margin: 0 -7px; padding: 0 7px; height: 24px; border-radius: 6px;
+  font: inherit; font-size: 13.5px; color: var(--text); background: none; border: 0; text-align: left; white-space: nowrap;
+  transition: background var(--fast) var(--ease);
+}
+.sk-val:not(:disabled):hover, .sk-val[aria-expanded="true"] { background: #F4F2EE; }
+.sk-val:disabled { cursor: default; }
+.sk-val-ar { display: grid; color: var(--text-faint); opacity: 0; transition: opacity var(--fast) var(--ease); }
+.sk-val-ar svg { display: block; }
+.sk-val-ar--r svg { transform: rotate(-90deg); }
+.sk-val:not(:disabled):hover .sk-val-ar { opacity: 1; }
+.sk-state-dot { width: 7px; height: 7px; border-radius: 50%; background: #C28A1E; flex: none; }
+.sk-state.is-live .sk-state-dot { background: #2F8A55; }
+.sk-who { display: inline-flex; align-items: center; gap: 8px; }
+.sk-av { width: 20px !important; height: 20px !important; flex: none; }
+.sk-av.mx-ini { font-size: 8px; }
+.sk-use { position: relative; display: flex; align-items: baseline; gap: 7px; max-width: 100%; padding-right: 22px; box-sizing: border-box; }
+.sk-use-n {
+  appearance: none; border: 0; background: none; cursor: pointer; padding: 0; min-width: 0;
+  font: inherit; font-size: 13.5px; line-height: 24px; color: var(--text); text-align: left;
+  text-decoration: underline; text-decoration-color: #D8D3CC; text-underline-offset: 3px;
+}
+.sk-use-n:hover { text-decoration-color: var(--text-soft); }
+.sk-use .sk-faint { flex: none; font-size: 12.5px; line-height: 24px; }
+.sk-use { align-items: flex-start; }
+.sk-use-x { position: absolute; right: 0; top: 3px; width: 18px !important; height: 18px !important; opacity: 0; transition: opacity var(--fast) var(--ease); }
+.sk-use:hover .sk-use-x { opacity: 1; }
+.sk-add--d { margin-top: 0; padding: 0; line-height: 24px; }
+.sk-d-l { display: flex; align-items: center; gap: 6px; }
+.sk-d-add { width: 20px !important; height: 20px !important; opacity: 0; transition: opacity var(--fast) var(--ease); }
+.sk-d-add svg { width: 12px; height: 12px; display: block; }
+.sk-d:hover .sk-d-add, .sk-d-add:focus-visible { opacity: 1; }
+
+/* the panel turned to runs or versions */
+.sk-pane-head {
+  appearance: none; border: 0; background: none; cursor: pointer;
+  display: inline-flex; align-items: center; gap: 4px;
+  margin: 0 0 6px -7px; padding: 4px 9px 4px 5px; border-radius: 7px;
+  font: inherit; font-size: 13px; font-weight: 500; color: var(--text);
+}
+.sk-pane-head:hover { background: var(--tint); }
+.sk-pane-ar { display: grid; transform: rotate(180deg); color: var(--text-soft); }
+.sk-pane-ar svg { width: 14px; height: 14px; display: block; }
+.sk-log, .sk-vers { max-height: calc(100vh - 220px); overflow-y: auto; margin-right: -8px; padding-right: 8px; }
+.sk-ev { display: flex; align-items: flex-start; gap: 10px; padding: 9px 0; border-top: 1px solid var(--line-soft); }
+.sk-ev:first-child { border-top: 0; }
+.sk-ev .sk-av { margin-top: 1px; }
+.sk-ev-t { min-width: 0; display: flex; flex-direction: column; gap: 1px; font-size: 13px; line-height: 1.45; color: var(--text-soft); }
+.sk-ev-a { overflow-wrap: anywhere; }
+.sk-ev-a b { font-weight: 500; color: var(--text); }
+.sk-ev-on { color: var(--text); }
+.sk-ev-m { font-size: 12.5px; color: var(--text-faint); }
+.sk-from {
+  appearance: none; border: 0; background: none; padding: 0; cursor: pointer; font: inherit; color: var(--text-soft);
+  text-decoration: underline; text-decoration-color: #D8D3CC; text-underline-offset: 3px;
+}
+.sk-from:hover { color: var(--text); }
+.sk-ver { display: flex; flex-direction: column; gap: 2px; padding: 10px 0; border-top: 1px solid var(--line-soft); font-size: 13px; line-height: 1.45; }
+.sk-ver:first-child { border-top: 0; }
+.sk-ver-top { display: flex; align-items: center; justify-content: space-between; gap: 10px; min-height: 24px; }
+.sk-ver b { font-weight: 500; color: var(--text); }
+.sk-ver-note { color: var(--text-soft); }
+.sk-ver.is-pending b { color: #A8741A; }
+.sk-ver.is-pending span { color: var(--text-faint); }
+.sk-ver-tag { display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; color: var(--text-soft); }
+.sk-ver-tag::before { content: ''; width: 7px; height: 7px; border-radius: 50%; background: #2F8A55; }
+.sk-restore {
+  appearance: none; cursor: pointer; height: 24px; padding: 0 9px; border-radius: 7px;
+  font: inherit; font-size: 12.5px; color: var(--text); background: var(--surface); border: 1px solid var(--line);
+  opacity: 0; transition: opacity var(--fast) var(--ease), background var(--fast) var(--ease);
+}
+.sk-ver:hover .sk-restore, .sk-restore:focus-visible { opacity: 1; }
+.sk-restore:hover { background: var(--tint); border-color: var(--line-strong); }
+
+/* ── beside the Build with AI chat: the brief, then what it decides ── */
+.deck-view[data-kind="skill"] .xp-publish { display: none; }
+.sk-art .rqb-title { margin-bottom: 6px; }
+.sk-art-about { margin: 0 0 4px; font-size: 14px; line-height: 1.6; color: var(--text-soft); outline: 0; }
+.sk-art .sk-steps-wrap { margin-top: 12px; }
+.sk-art .sk-details { margin-top: 22px; padding-top: 14px; border-top: 1px solid var(--line-soft); }
+/* a long name wraps as text, with its kind following it, not squeezed beside it */
+.sk-use { display: block; align-self: stretch; line-height: 24px; }
+.sk-use-n { display: inline; line-height: 24px; }
+.sk-use .sk-faint { margin-left: 6px; }

@@ -1,0 +1,15 @@
+{
+  "name": "clavia",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Clavia — the legal product. A zero-dependency static app built from src/ into a single self-contained file.",
+  "type": "module",
+  "scripts": {
+    "build": "node build.mjs",
+    "dev": "node dev-server.mjs",
+    "sprite": "node sprite.mjs"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

@@ -1,0 +1,23 @@
+# Vercel builds dist/ itself (see buildCommand in vercel.json), so the build
+# inputs — src/, build.mjs, sprite.mjs — MUST ship. Only things the build and
+# the host never touch are excluded.
+node_modules
+.DS_Store
+*.log
+
+# Docs and research — not part of the app
+BUILD.md
+README.md
+PLAYBOOK-RESEARCH.md
+research.md
+
+# One-off design-review artefacts (~20MB) and brand hand-off packages
+report
+handoff
+handoff-build.mjs
+Clavia brand and motion
+*.zip
+
+# Local-only tooling
+dev-server.mjs
+export-reviews.py

@@ -1,0 +1,361 @@
+/* ================================================================
+   Composer — ported from meridian/app.html (the + menu, its
+   cascades, the mode pills and the model switcher). Structure and
+   behaviour are unchanged; only the colour and motion tokens are
+   remapped onto this project's scale.
+================================================================ */
+
+.askwrap { position: relative; width: 100%; max-width: 660px; }
+
+.ask {
+  position: relative;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  box-shadow: 0 1px 2px rgba(20,20,19,.04),
+              0 4px 10px -5px rgba(20,20,19,.06),
+              0 14px 28px -20px rgba(20,20,19,.12);
+  transition: border-color .2s var(--ease), box-shadow .2s var(--ease);
+}
+.ask:focus-within {
+  border-color: var(--line-strong);
+  box-shadow: 0 1px 2px rgba(20,20,19,.05),
+              0 5px 12px -5px rgba(20,20,19,.08),
+              0 16px 32px -20px rgba(20,20,19,.15);
+}
+.ask textarea {
+  width: 100%; border: 0; background: 0; outline: 0; resize: none;
+  font-family: var(--font); font-size: 16.5px; line-height: 1.6; color: var(--text);
+  padding: 19px 24px 7px; min-height: 88px;
+}
+.ask textarea::placeholder { color: var(--text-faint); }
+
+.askbar {
+  position: relative;
+  display: flex; align-items: center; gap: 4px;
+  padding: 8px 14px 14px 17px;
+}
+
+.iconbtn {
+  appearance: none; background: 0; border: 0; cursor: pointer;
+  width: 26px; height: 26px;
+  border-radius: 5px; display: grid; place-items: center; color: var(--text-faint);
+  transition: background .15s var(--ease), color .15s var(--ease);
+}
+.iconbtn:hover { background: var(--tint); color: var(--text); }
+
+.askbar .iconbtn { width: 32px; height: 32px; border-radius: 9px; color: var(--text-soft); }
+.askbar .iconbtn:hover { background: var(--tint); color: var(--text); }
+/* while its menu is open the + stays lit, so the two read as one control */
+.askbar .iconbtn.on { background: var(--tint); color: var(--text); }
+
+.send {
+  margin-left: auto; appearance: none; border: 0; cursor: pointer;
+  width: 32px; height: 32px; border-radius: 9px;
+  background: var(--rail-bg); color: var(--sand);
+  display: grid; place-items: center;
+  transition: background .16s var(--ease), opacity .16s;
+}
+.send:hover { background: var(--rail-bg-active-solid); }
+.send[disabled] { background: var(--tint); color: var(--text-faint); cursor: not-allowed; }
+.askbar .send { margin-left: 0; }
+
+/* ── mode pills ───────────────────────────────────────────────
+   What you picked sits on its own row above the text, always —
+   a layout that changes with its contents reads as a glitch. */
+.modebar { display: flex; flex-wrap: wrap; gap: 6px; padding: 17px 24px 0; }
+.modebar[hidden] { display: none; }
+.ask.hasmode textarea { padding-top: 9px; }
+
+.modechip {
+  cursor: pointer;
+  display: inline-flex; align-items: center; gap: 6px; height: 26px;
+  background: var(--tint); border-radius: 999px; padding: 0 11px 0 9px;
+  font-size: 14px; font-weight: 500; color: var(--text); white-space: nowrap;
+  animation: pillIn .2s var(--ease) backwards;
+}
+.modechip svg { flex: none; color: var(--text-soft); }
+.modechip .av2 { width: 15px; height: 15px; display: block; }
+@keyframes pillIn { from { opacity: 0; transform: translateX(-4px); } to { opacity: 1; transform: none; } }
+
+/* one 14px well holds both marks; the subject dissolves into the dismiss */
+.modechip .sw { position: relative; width: 14px; height: 14px; flex: none; }
+.modechip .sw svg {
+  position: absolute; inset: 0; width: 14px; height: 14px; display: block;
+  transition: opacity .16s var(--ease), transform .18s var(--ease);
+}
+.modechip .sw .on  { opacity: 1; transform: scale(1) rotate(0); }
+.modechip .sw .off { opacity: 0; transform: scale(.72) rotate(-45deg); }
+.modechip:hover .sw .on  { opacity: 0; transform: scale(.72) rotate(45deg); }
+.modechip:hover .sw .off { opacity: 1; transform: scale(1) rotate(0); }
+
+.srcchips { display: flex; align-items: center; gap: 6px; margin-left: 2px; }
+
+/* ── the + menu ───────────────────────────────────────────────
+   Two kinds of row: sources the assistant may draw on (which stay
+   ticked), and things it can make (one step in, under Create). */
+.plus { position: relative; display: flex; align-items: center; }
+.plusmenu {
+  position: absolute; top: calc(100% + 8px); left: 0; z-index: 40;
+  width: 246px; padding: 5px;
+  max-height: calc(100dvh - 24px);
+  background: var(--surface); border: 1px solid var(--line); border-radius: 12px;
+  box-shadow: 0 2px 6px rgba(70,66,58,.07), 0 22px 44px -24px rgba(70,66,58,.32);
+}
+.plusmenu.up { top: auto; bottom: calc(100% + 8px); }
+.plusmenu.afloat { position: fixed; z-index: 95; }
+.plusmenu[hidden] { display: none; }
+.plusmenu.opening { animation: menuIn .16s var(--ease) backwards; }
+.plusmenu button {
+  appearance: none; cursor: pointer; display: flex; align-items: center; gap: 10px; width: 100%;
+  text-align: left; background: 0; border: 0; border-radius: 8px; padding: 8px 9px;
+  font-family: var(--font); transition: background .12s var(--ease);
+}
+.plusmenu button:hover { background: var(--tint); }
+.plusmenu button svg.ic { flex: none; color: var(--text-soft); }
+.plusmenu .lbl { flex: 1; min-width: 0; }
+.plusmenu .nmm { display: block; font-size: 13.2px; color: var(--text); line-height: 1.3; }
+.plusmenu .arw { flex: none; color: var(--text-faint); }
+.plusmenu .tick { flex: none; color: var(--text); opacity: 0; }
+.plusmenu button.on .tick { opacity: 1; }
+.plusmenu button.on .nmm { font-weight: 500; }
+/* one flat menu — groups get a label, never a submenu */
+.plusmenu .sec {
+  font-family: var(--mono); font-variant-numeric: tabular-nums;
+  font-weight: 500; font-size: 10px; letter-spacing: .085em; text-transform: uppercase;
+  color: var(--text-faint); padding: 11px 10px 4px; margin-top: 3px;
+  border-top: 1px solid var(--line-soft);
+}
+.plusmenu .sec:first-child { border-top: 0; margin-top: 0; }
+/* a hairline between groups that need no name */
+.plusmenu .sep { height: 1px; margin: 5px 4px; background: var(--line-soft); }
+
+@keyframes menuIn { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: none; } }
+
+/* ── cascading panels off the + menu ──
+   Skills, Agents and Projects are lists that grow, so they get their
+   own panel with a search at the top rather than spilling into the root. */
+.cascwrap { position: relative; display: block; }
+.pmc {
+  position: absolute; left: calc(100% + 6px); top: -5px; z-index: 50;
+  width: 238px; padding: 5px;
+  background: var(--surface); border: 1px solid var(--line); border-radius: 12px;
+  box-shadow: 0 2px 6px rgba(70,66,58,.07), 0 22px 44px -24px rgba(70,66,58,.32);
+}
+.pmc.left { left: auto; right: calc(100% + 6px); }
+.pmc[hidden] { display: none; }
+.pmc.opening { animation: menuIn .14s var(--ease) backwards; }
+/* the panel sits 6px off its row, and that gap belongs to no element — cross it
+   and the wrap fires mouseleave, so the panel blinks. These carry the pointer
+   over. They hang off the ROW, not the panel: a full-height bridge would sit in
+   front of the rows below and swallow their hover on the way past. */
+.cascwrap::after, .cascwrap::before { content: ""; position: absolute; top: 0; height: 100%; width: 11px; }
+.cascwrap::after  { right: -11px; }
+.cascwrap::before { left: -11px; }
+
+.pmc-find {
+  display: flex; align-items: center; gap: 8px; padding: 6px 9px 8px;
+  border-bottom: 1px solid var(--line-soft); margin-bottom: 4px;
+}
+.pmc-find svg { flex: none; color: var(--text-faint); }
+.pmc-find input {
+  flex: 1; min-width: 0; border: 0; background: 0; outline: 0;
+  font-family: var(--font); font-size: 13px; color: var(--text);
+}
+.pmc-find input::placeholder { color: var(--text-faint); }
+/* rows style themselves, so the panel works anywhere on the page */
+.pmc button {
+  appearance: none; cursor: pointer; display: flex; align-items: center; gap: 10px; width: 100%;
+  text-align: left; background: 0; border: 0; border-radius: 8px; padding: 7px 9px;
+  font-family: var(--font); transition: background .12s var(--ease);
+}
+.pmc button:hover { background: var(--tint); }
+.pmc .lbl { flex: 1; min-width: 0; }
+.pmc .nmm {
+  display: block; font-size: 13.2px; color: var(--text); line-height: 1.3;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.pmc .av2 { flex: none; width: 19px; height: 19px; display: block; }
+.pmc-list { max-height: 244px; overflow-y: auto; overflow-x: hidden; scrollbar-width: none; }
+.pmc-list .none { padding: 10px 9px; font-size: 12.4px; color: var(--text-faint); }
+
+/* ── @ for a colleague, / for a skill ── */
+/* Above the box with a gap, in both composers. It used to be offset from
+   the tall home composer's own height, so in the short docked one it sat
+   across the input it belonged to. */
+.tokmenu {
+  position: absolute; left: 16px; bottom: calc(100% + 8px); z-index: 45;
+  width: 250px; padding: 5px;
+  background: var(--surface); border: 1px solid var(--line); border-radius: 12px;
+  box-shadow: 0 2px 6px rgba(70,66,58,.07), 0 22px 44px -24px rgba(70,66,58,.32);
+}
+.tokmenu[hidden] { display: none; }
+.tokmenu.opening { animation: menuIn .16s var(--ease) backwards; }
+.tokmenu button {
+  appearance: none; cursor: pointer; display: flex; align-items: center; gap: 10px; width: 100%;
+  text-align: left; background: 0; border: 0; border-radius: 8px; padding: 7px 9px;
+  font-family: var(--font); transition: background .12s var(--ease);
+}
+.tokmenu button:hover, .tokmenu button.act { background: var(--tint); }
+.tokmenu .av2, .tokmenu svg.ic { flex: none; width: 20px; height: 20px; color: var(--text-soft); }
+.tokmenu .lbl { flex: 1; min-width: 0; }
+.tokmenu .nmm { display: block; font-size: 13.4px; color: var(--text); line-height: 1.3; }
+.tokmenu .none { font-size: 12.5px; color: var(--text-faint); padding: 8px 10px; }
+.tokmenu .hd {
+  font-family: var(--mono); font-weight: 500; font-size: 10px;
+  letter-spacing: .085em; text-transform: uppercase;
+  color: var(--text-faint); padding: 7px 10px 4px;
+}
+
+/* ── model switcher ───────────────────────────────────────────
+   The platform is model-agnostic, so the composer says who is
+   answering. Auto is the default and picks per request. */
+.mdl { position: relative; margin-left: auto; display: flex; align-items: center; }
+.mdlbtn {
+  appearance: none; cursor: pointer; display: inline-flex; align-items: center; gap: 7px;
+  font-family: var(--font); font-size: 13.5px; font-weight: 500; color: var(--text);
+  background: 0; border: 0; border-radius: 9px; height: 32px; padding: 0 10px; margin-right: 6px;
+  transition: background .14s var(--ease);
+}
+.mdlbtn:hover, .mdlbtn.on { background: var(--tint); }
+.mdlbtn svg { color: var(--text-faint); }
+
+.mdlmenu {
+  position: absolute; top: calc(100% + 8px); right: 0; z-index: 40;
+  width: 268px; padding: 5px;
+  background: var(--surface); border: 1px solid var(--line); border-radius: 12px;
+  box-shadow: 0 2px 6px rgba(70,66,58,.07), 0 22px 44px -24px rgba(70,66,58,.32);
+}
+.mdlmenu.up { top: auto; bottom: calc(100% + 8px); }
+.mdlmenu[hidden] { display: none; }
+.mdlmenu.opening { animation: menuIn .16s var(--ease) backwards; }
+.mdlmenu button {
+  appearance: none; cursor: pointer; display: flex; align-items: flex-start; gap: 10px; width: 100%;
+  text-align: left; background: 0; border: 0; border-radius: 8px; padding: 7px 9px;
+  font-family: var(--font); transition: background .12s var(--ease);
+}
+.mdlmenu button:hover { background: var(--tint); }
+.mdlmenu .nmm { display: block; font-size: 13.2px; color: var(--text); line-height: 1.3; }
+.mdlmenu .dsc { display: block; font-size: 11.6px; color: var(--text-faint); margin-top: 1px; line-height: 1.35; }
+.mdlmenu .tick { margin-left: auto; flex: none; color: var(--text); opacity: 0; padding-top: 2px; }
+.mdlmenu button.on .tick { opacity: 1; }
+
+/* ── tooltip ── */
+.tip {
+  position: fixed; z-index: 240; pointer-events: none;
+  max-width: 260px; white-space: nowrap;
+  background: var(--text); color: var(--surface);
+  font-size: 11.8px; line-height: 1.3; letter-spacing: .002em;
+  padding: 5px 9px; border-radius: 7px;
+  box-shadow: 0 8px 20px -10px rgba(20, 20, 19, .5);
+  /* it arrives where it will sit, rising a couple of pixels out of the
+     thing it names rather than appearing on top of it */
+  opacity: 0; transform: translateY(2px);
+  transition: opacity .12s var(--ease), transform .12s var(--ease);
+}
+.tip[data-side="bottom"] { transform: translateY(-2px); }
+.tip[data-on="true"] { opacity: 1; transform: translateY(0); }
+
+/* ── toast ── */
+.toast {
+  position: fixed; left: 50%; bottom: 28px; transform: translateX(-50%);
+  z-index: 200; max-width: 460px;
+  background: var(--text); color: var(--surface);
+  font-size: 13.4px; line-height: 1.45;
+  padding: 11px 16px; border-radius: 10px;
+  box-shadow: 0 12px 32px -12px rgba(20,20,19,.4);
+  animation: menuIn .18s var(--ease) backwards;
+}
+
+/* ── docked in a conversation ──────────────────────────────────
+   One row, the way Claude's is: the + , the field and the controls sit
+   on the same line and the pill grows downward as you type. `display:
+   contents` dissolves the bar so its buttons become flex items of the
+   pill itself, which keeps composer.js untouched. */
+.ask-mini {
+  display: flex; flex-wrap: wrap; align-items: center;
+  gap: 2px;
+  padding: 5px 7px 5px 7px;
+  border-radius: 26px;
+}
+.ask-mini .askbar { display: contents; }
+
+/* One line stays one line: what you picked rides beside the mark that
+   picked it rather than opening a row of its own above the question. It
+   still wraps if you stack enough of them to need a second line. */
+.ask-mini .modebar { order: 1; flex: 0 1 auto; min-width: 0; padding: 0; }
+.ask-mini .plus { order: 0; }
+.ask-mini .srcchips { order: 1; }
+.ask-mini textarea {
+  order: 2;
+  flex: 1 1 140px;
+  min-height: 26px; max-height: 168px;
+  /* nothing between the mark and the question but the mark's own
+     breathing room — the words start where the eye already is */
+  padding: 9px 6px 9px 2px;
+  font-size: 15px; line-height: 1.45;
+  /* a bar down the side of a one-line box is the box remembering a
+     question you already asked */
+  scrollbar-width: none;
+}
+.ask-mini textarea::-webkit-scrollbar { width: 0; height: 0; }
+.ask-mini .mdl { order: 3; margin-left: 0; }
+.ask-mini .send { order: 4; }
+
+.ask-mini .iconbtn { width: 32px; height: 32px; border-radius: 999px; }
+.ask-mini .send { width: 32px; height: 32px; border-radius: 999px; }
+.ask-mini .mdlbtn { font-size: 12.8px; padding: 0 10px; height: 30px; margin-right: 2px; }
+/* the box no longer grows when something is picked, so the corner it
+   was softening for stays where it was */
+.ask-mini.hasmode { border-radius: 26px; }
+.ask-mini .modechip { height: 23px; font-size: 13.2px; padding: 0 10px 0 8px; }
+
+/* a face in the @ list, and the assistant's own mark beside them */
+.tokmenu .tokface { width: 20px; height: 20px; border-radius: 50%; overflow: hidden;
+  display: grid; place-items: center; flex: none; }
+.tokmenu .tokface svg, .tokmenu .tokface img { width: 100%; height: 100%; display: block; }
+.tokmenu .tokspark { width: 15px; height: 15px; flex: none; color: var(--gold); }
+.tokmenu .hd:not(:first-child) { margin-top: 6px; }
+.tokmenu .tokall { width: 17px; height: 17px; flex: none; color: var(--text-soft); }
+.tokmenu .tokbot { background: var(--bg-sunk); color: var(--gold); }
+.tokmenu .tokbot svg { width: 13px; height: 13px; }
+
+/* ── Apps · what is connected, and what is not ────────────────
+   The first-run card is where you meet these and it can be dismissed;
+   this is where they live afterwards, so nothing is lost by putting that
+   card down. Both surfaces read one set, so they cannot disagree. */
+.plusmenu .cnt {
+  flex: none;
+  font-size: 11.5px;
+  color: var(--text-faint);
+  margin-left: auto;
+  white-space: nowrap;
+}
+.pmc-apps { width: 246px; }
+.pmc-apps .pmc-list { max-height: none; }
+/* brand marks keep their own colour; everything else in here is a glyph */
+.pmc .ic-brand { flex: none; display: block; }
+.pmc .approw { gap: 9px; padding: 8px 9px; }
+.pmc .appstate {
+  flex: none;
+  font-size: 11.5px;
+  color: var(--text-faint);
+  white-space: nowrap;
+}
+/* Both states are plain text. Four bordered pills stacked inside a menu
+   that is already a list of clickable rows is four buttons inside four
+   buttons — the row is the control, and the word only has to say which
+   way it goes. */
+.pmc .approw:not(.on) .appstate { color: var(--text-soft); }
+.pmc .approw:not(.on):hover .appstate { color: var(--text); }
+/* the same tick as the toggles in the root menu, at full strength */
+.pmc .approw .tick { flex: none; color: var(--text); }
+
+
+/* ── flat at rest ─────────────────────────────────────────────────
+   Empty and unfocused, the box has nothing to say and does not need to
+   lift off the page for it — the border is enough to show where it is.
+   The shadow belongs to focus, where it means the thing is live and
+   waiting for you. (.ask:focus-within out-specifies this, so the lift
+   still arrives the moment you click in.) */
+.ask { box-shadow: none; }

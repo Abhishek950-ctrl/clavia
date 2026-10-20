@@ -1,0 +1,373 @@
+/* Every @keyframes in the Clavia app, as shipped (71). Grouped by the file they live in. */
+
+/* artifacts.css */
+@keyframes cardIn {
+  from { opacity: 0; transform: translateY(8px) scale(.99); }
+  to   { opacity: 1; transform: none; }
+}
+
+/* artifacts.css */
+@keyframes pcSpin {
+  to { transform: rotate(360deg); }
+}
+
+/* composer.css */
+@keyframes menuIn {
+  from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: none; }
+}
+
+/* composer.css */
+@keyframes pillIn {
+  from { opacity: 0; transform: translateX(-4px); } to { opacity: 1; transform: none; }
+}
+
+/* modules.css */
+@keyframes mxAttySet {
+  0% { transform: scale(.8); opacity: .3; } 100% { transform: none; opacity: 1; }
+}
+
+/* modules.css */
+@keyframes mxBreathe {
+  50% { opacity: .45; }
+}
+
+/* modules.css */
+@keyframes mxChipHit {
+  0%, 25% { background: #FFF3C4; } 100% { background: transparent; }
+}
+
+/* modules.css */
+@keyframes mxFieldHit {
+  0%, 30% { background: #FFF3C4; } 100% { background: transparent; }
+}
+
+/* modules.css */
+@keyframes mxPop {
+  0% { transform: scale(.6); } 60% { transform: scale(1.18); } 100% { transform: none; }
+}
+
+/* modules.css */
+@keyframes mxRead {
+  from { opacity: 0; transform: translateY(3px); }
+}
+
+/* modules.css */
+@keyframes mxShake {
+  20% { transform: translateX(-5px); } 45% { transform: translateX(4px); } 70% { transform: translateX(-2px); } 100% { transform: none; }
+}
+
+/* modules.css */
+@keyframes mxShimmer {
+  to { background-position: -200% 0; }
+}
+
+/* modules.css */
+@keyframes rqb-dot {
+  0%, 80%, 100% { opacity: .35; transform: none; } 40% { opacity: 1; transform: translateY(-2px); }
+}
+
+/* modules.css */
+@keyframes rqb-new {
+  0%, 30% { background: #FBF3DF; } 100% { background: transparent; }
+}
+
+/* modules.css */
+@keyframes rqb-spin {
+  to { transform: rotate(360deg); }
+}
+
+/* modules.css */
+@keyframes rqi-in {
+  from { opacity: 0; transform: translateY(-4px); }
+}
+
+/* modules.css */
+@keyframes rqp-flash {
+  0%, 35% { background: #FBF0D5; box-shadow: 0 0 0 6px #FBF0D5; } 100% { background: transparent; box-shadow: 0 0 0 6px transparent; }
+}
+
+/* modules.css */
+@keyframes rqp-load {
+  from { left: -40%; } to { left: 100%; }
+}
+
+/* modules.css */
+@keyframes rqp-shim {
+  from { background-position: 240px 0; } to { background-position: -240px 0; }
+}
+
+/* playbooks.css */
+@keyframes pbArrive {
+  from { opacity: 0; transform: translateY(-6px); } to { opacity: 1; transform: none; }
+}
+
+/* playbooks.css */
+@keyframes pbDlgIn {
+  from { opacity: 0; transform: translateY(8px) scale(.985); } to { opacity: 1; transform: none; }
+}
+
+/* playbooks.css */
+@keyframes pbGlow {
+  0%, 30% { background: #F6F1E6; } 100% { background: transparent; }
+}
+
+/* playbooks.css */
+@keyframes pbNudge {
+  20% { transform: translateX(-5px); } 45% { transform: translateX(4px); }
+  70% { transform: translateX(-2px); } 100% { transform: none; }
+}
+
+/* playbooks.css */
+@keyframes pbStep {
+  from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: none; }
+}
+
+/* playbooks.css */
+@keyframes pbvCtxIn {
+  from { opacity: 0; transform: translateY(-6px); }
+}
+
+/* playbooks.css */
+@keyframes pbvFlush {
+  0%, 35% { background: #F7F1E4; border-color: #E4D6B6; } 100% { background: var(--surface); }
+}
+
+/* playbooks.css */
+@keyframes pbvHlIn {
+  from { opacity: 0; }
+}
+
+/* playbooks.css */
+@keyframes pbvIdxOpen {
+  from { opacity: 0; transform: translateY(-5px); } to { opacity: 1; transform: none; }
+}
+
+/* playbooks.css */
+@keyframes pbvLift {
+  from { transform: none; box-shadow: none; }
+}
+
+/* playbooks.css */
+@keyframes pbvPing {
+  0%, 40% { opacity: .45; } 100% { opacity: 1; }
+}
+
+/* playbooks.css */
+@keyframes pbvSecFlush {
+  0%, 35% { background: #F7F1E4; box-shadow: 0 0 0 8px #F7F1E4; } 100% { background: transparent; box-shadow: 0 0 0 8px transparent; }
+}
+
+/* playbooks.css */
+@keyframes pbvUnfold {
+  from { opacity: 0; transform: translateY(-8px); } to { opacity: 1; transform: none; }
+}
+
+/* quill.css */
+@keyframes cqDrift {
+  0%, 100% { transform: translateX(0); } 70% { transform: translateX(3px); }
+}
+
+/* quill.css */
+@keyframes cqDrop {
+  from { transform: scale(0); } to { transform: scale(1); }
+}
+
+/* quill.css */
+@keyframes cqFlourish {
+  0% { stroke-dashoffset: 100; opacity: 1; } 45% { stroke-dashoffset: 0; opacity: 1; }
+  75% { opacity: 1; } 100% { stroke-dashoffset: 0; opacity: 0; }
+}
+
+/* quill.css */
+@keyframes cqGrow {
+  from { transform: scale(0); } to { transform: scale(1); }
+}
+
+/* quill.css */
+@keyframes cqRise {
+  from { opacity: 0; transform: rotate(-16deg) translateY(3px); } to { opacity: 1; transform: none; }
+}
+
+/* quill.css */
+@keyframes cqScrib {
+  from { transform: rotate(-1.4deg) translateY(0); } to { transform: rotate(1.4deg) translateY(-.4px); }
+}
+
+/* quill.css */
+@keyframes cqScribe {
+  0% { stroke-dashoffset: 100; opacity: 1; } 70% { stroke-dashoffset: 0; opacity: 1; }
+  88% { opacity: 1; } 100% { stroke-dashoffset: 0; opacity: 0; }
+}
+
+/* quill.css */
+@keyframes cqSettle {
+  from { transform: rotate(5deg); } to { transform: rotate(0); }
+}
+
+/* quill.css */
+@keyframes cqSign {
+  from { stroke-dashoffset: 100; opacity: 1; } to { stroke-dashoffset: 0; opacity: 1; }
+}
+
+/* quill.css */
+@keyframes cqSway {
+  from { transform: rotate(-1.4deg); } to { transform: rotate(1.4deg); }
+}
+
+/* review.css */
+@keyframes jv-aifresh {
+  from { opacity: 0; transform: translateY(4px); }
+}
+
+/* review.css */
+@keyframes jv-aiin {
+  from { opacity: 0; transform: scaleX(.92); }
+}
+
+/* review.css */
+@keyframes jv-airewrite {
+  0%, 100% { opacity: .85; } 50% { opacity: .35; }
+}
+
+/* review.css */
+@keyframes jv-aishake {
+  20% { transform: translateX(-5px); } 45% { transform: translateX(4px); } 70% { transform: translateX(-2px); } 100% { transform: none; }
+}
+
+/* review.css */
+@keyframes jv-fpop {
+  from { opacity: 0; transform: translateY(-3px); }
+}
+
+/* review.css */
+@keyframes jv-pslide {
+  0% { transform: translateX(-100%); } 100% { transform: translateX(300%); }
+}
+
+/* review.css */
+@keyframes jv-sdown {
+  to { transform: translateY(100%); }
+}
+
+/* review.css */
+@keyframes jv-sfade {
+  from { opacity: 0; }
+}
+
+/* review.css */
+@keyframes jv-spin {
+  to { transform: rotate(360deg); }
+}
+
+/* review.css */
+@keyframes jv-sup {
+  from { transform: translateY(100%); }
+}
+
+/* styles.css */
+@keyframes brRun {
+  from { transform: translateX(-100%); }
+  to   { transform: translateX(313%); }
+}
+
+/* styles.css */
+@keyframes cueIn {
+  from { opacity: 0; transform: translateY(-8px); }
+  60%  { opacity: 1; }
+}
+
+/* styles.css */
+@keyframes cuePulse {
+  0%, 100% { opacity: 1 } 50% { opacity: .35 }
+}
+
+/* styles.css */
+@keyframes cueSpin {
+  to { transform: rotate(360deg) }
+}
+
+/* styles.css */
+@keyframes ddIn {
+  from { opacity: 0; transform: translateY(-4px) scale(.985); }
+  to   { opacity: 1; transform: none; }
+}
+
+/* styles.css */
+@keyframes fade {
+  from { opacity: 0; } to { opacity: 1; }
+}
+
+/* styles.css */
+@keyframes fadeIn {
+  from { opacity: 0; } to { opacity: 1; }
+}
+
+/* styles.css */
+@keyframes markSweep {
+  0%, 100% { opacity: .18; }
+  12%      { opacity: 1; }
+  38%      { opacity: .18; }
+}
+
+/* styles.css */
+@keyframes markUnfurl {
+  0%   { opacity: 0; transform: scale(.2) rotate(-40deg); }
+  55%  { opacity: 1; transform: scale(1.25) rotate(0deg); }
+  100% { opacity: 1; transform: scale(1) rotate(0deg); }
+}
+
+/* styles.css */
+@keyframes panelIn {
+  from { transform: translateX(16px); opacity: 0; }
+}
+
+/* styles.css */
+@keyframes pulse {
+  0%,100% { opacity: 1; } 50% { opacity: .35; }
+}
+
+/* styles.css */
+@keyframes recCaret {
+  0%, 100% { opacity: 1; } 50% { opacity: .1; }
+}
+
+/* styles.css */
+@keyframes recLine {
+  from { opacity: 0; transform: translateY(3px); }
+  to { opacity: 1; transform: none; }
+}
+
+/* styles.css */
+@keyframes recPulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: .4; transform: scale(.9); }
+}
+
+/* styles.css */
+@keyframes recSpin {
+  to { transform: rotate(360deg); }
+}
+
+/* styles.css */
+@keyframes recWave {
+  0%, 100% { transform: scaleY(.22); }
+  50% { transform: scaleY(1); }
+}
+
+/* styles.css */
+@keyframes rise {
+  from { opacity: 0; transform: translateY(10px); }
+  to   { opacity: 1; transform: none; }
+}
+
+/* styles.css */
+@keyframes shareIn {
+  from { opacity: 0; transform: translateY(10px) scale(.985); }
+  to   { opacity: 1; transform: none; }
+}
+
+/* styles.css */
+@keyframes typingBounce {
+  0%, 60%, 100% { transform: translateY(0); opacity: .45; }
+  30%           { transform: translateY(-4px); opacity: 1; }
+}

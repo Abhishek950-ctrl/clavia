@@ -1,0 +1,61 @@
+/* ================================================================
+   The Clavia quill — see quill.js. Every class and keyframe carries
+   a cq- prefix: the study's own names (rise, grow, body, pen) are
+   ones this app already uses for other things.
+================================================================ */
+.cq-t-paper { --q-f: #0E5B45; --q-s: #093D2F; --q-n: #B08A4E; --q-i: #0E5B45; --q-bg: #FFFFFF; }
+.cq-t-rail  { --q-f: #F1ECDF; --q-s: #D8D0BC; --q-n: #D4B173; --q-i: #F1ECDF; --q-bg: #0D1F16; }
+
+.cq { display: inline-flex; flex: none; }
+.cq-svg { width: 100%; height: 100%; display: block; overflow: visible; }
+.cq-svg * { transform-box: fill-box; transform-origin: center; }
+.cq .cq-qb { fill: none; stroke: var(--q-f); stroke-width: .8; stroke-linecap: round; transform-box: view-box; }
+.cq .cq-qs { fill: var(--q-s); }
+.cq .cq-qn { fill: var(--q-n); }
+.cq .cq-slit { stroke: var(--q-bg); stroke-width: .35; stroke-linecap: round; }
+.cq .cq-swash, .cq .cq-cursive {
+  fill: none; stroke: var(--q-i); stroke-linecap: round; stroke-linejoin: round;
+  stroke-dasharray: 100 102; stroke-dashoffset: 100; opacity: 0;
+}
+.cq .cq-swash { stroke-width: 1.1; }
+.cq .cq-cursive { stroke-width: 1; }
+.cq .cq-inkdot { fill: var(--q-i); transform: scale(0); }
+.cq .cq-body, .cq .cq-pen { transform-box: view-box; transform-origin: 6.8px 46.1px; }
+
+/* idle — resting in the inkwell */
+.cq-s-idle .cq-body { animation: cqSway 5s ease-in-out infinite alternate; }
+@keyframes cqSway { from { transform: rotate(-1.4deg); } to { transform: rotate(1.4deg); } }
+
+/* greet — rises, unfurls, signs */
+.cq-s-greet .cq-body { animation: cqRise 1s cubic-bezier(.22,.8,.24,1) both; }
+@keyframes cqRise { from { opacity: 0; transform: rotate(-16deg) translateY(3px); } to { opacity: 1; transform: none; } }
+.cq-s-greet .cq-qb { animation: cqGrow .5s cubic-bezier(.22,.8,.24,1) both; animation-delay: calc(.25s + var(--u) * .55s); }
+@keyframes cqGrow { from { transform: scale(0); } to { transform: scale(1); } }
+.cq-s-greet .cq-swash { animation: cqFlourish 2s cubic-bezier(.22,.8,.24,1) .75s both; }
+@keyframes cqFlourish {
+  0% { stroke-dashoffset: 100; opacity: 1; } 45% { stroke-dashoffset: 0; opacity: 1; }
+  75% { opacity: 1; } 100% { stroke-dashoffset: 0; opacity: 0; }
+}
+
+/* work — the nib writes; the feather never deforms */
+.cq-s-work .cq-body { animation: cqDrift 2.4s ease-in-out infinite; }
+.cq-s-work .cq-pen { animation: cqScrib .28s ease-in-out infinite alternate; }
+.cq-s-work .cq-cursive { animation: cqScribe 2.4s cubic-bezier(.22,.8,.24,1) infinite; }
+@keyframes cqDrift { 0%, 100% { transform: translateX(0); } 70% { transform: translateX(3px); } }
+@keyframes cqScrib { from { transform: rotate(-1.4deg) translateY(0); } to { transform: rotate(1.4deg) translateY(-.4px); } }
+@keyframes cqScribe {
+  0% { stroke-dashoffset: 100; opacity: 1; } 70% { stroke-dashoffset: 0; opacity: 1; }
+  88% { opacity: 1; } 100% { stroke-dashoffset: 0; opacity: 0; }
+}
+
+/* done — the signature, and a dot of ink */
+.cq-s-done .cq-body { animation: cqSettle .8s cubic-bezier(.34,1.4,.64,1) both; }
+@keyframes cqSettle { from { transform: rotate(5deg); } to { transform: rotate(0); } }
+.cq-s-done .cq-swash { animation: cqSign 1s cubic-bezier(.22,.8,.24,1) both; }
+@keyframes cqSign { from { stroke-dashoffset: 100; opacity: 1; } to { stroke-dashoffset: 0; opacity: 1; } }
+.cq-s-done .cq-inkdot { animation: cqDrop .4s cubic-bezier(.34,1.56,.64,1) .9s both; }
+@keyframes cqDrop { from { transform: scale(0); } to { transform: scale(1); } }
+
+@media (prefers-reduced-motion: reduce) {
+  .cq * { animation: none !important; }
+}

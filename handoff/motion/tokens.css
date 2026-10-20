@@ -1,0 +1,9 @@
+/* Clavia motion tokens — from src/styles.css */
+:root {
+  --ease: cubic-bezier(0.2, 0, 0, 1);
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --fast: 120ms;
+  --base: 220ms;
+  --slow: 340ms;
+  --pb-open: cubic-bezier(0.32, 0.72, 0, 1);
+}

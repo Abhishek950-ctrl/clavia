@@ -1,0 +1,120 @@
+<!doctype html><html><head><meta charset="utf-8"><title>Clavia — the review pane</title>
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&family=Spectral:wght@400;500&display=swap" rel="stylesheet">
+<style>
+@page { size: A4; margin: 16mm 15mm 16mm; }
+* { box-sizing: border-box; }
+body { margin: 0; font-family: Geist, -apple-system, sans-serif; color: #1A1A18; font-size: 10pt; line-height: 1.5; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+h1, h2 { font-family: Spectral, Georgia, serif; font-weight: 400; letter-spacing: -0.01em; margin: 0; }
+h1 { font-size: 30pt; line-height: 1.1; }
+h2 { font-size: 18pt; margin-bottom: 4mm; }
+h3 { font-size: 12pt; font-weight: 600; margin: 0 0 2mm; }
+p { margin: 0 0 2.5mm; }
+.eyebrow { font-size: 9pt; color: #9A968E; letter-spacing: .02em; }
+.cover { page-break-after: always; }
+.cover .lead { font-size: 12pt; color: #3A3A37; max-width: 150mm; margin: 6mm 0 7mm; }
+.cover .shot { border: 1px solid #E8E4DF; border-radius: 3mm; overflow: hidden; }
+.cover .shot img { width: 100%; display: block; }
+.pts { display: grid; grid-template-columns: 1fr 1fr; gap: 3mm 8mm; margin-top: 7mm; }
+.pts b { font-weight: 600; }
+.pts div { font-size: 9.5pt; color: #3A3A37; }
+.page { page-break-before: always; }
+table { width: 100%; border-collapse: collapse; font-size: 8.8pt; }
+th { text-align: left; font-weight: 500; color: #6B6862; padding: 2mm 1.5mm; border-bottom: 1px solid #D8D3CC; font-size: 8.4pt; }
+td { padding: 1.8mm 1.5mm; border-bottom: 1px solid #F0EDE7; vertical-align: top; }
+td.m, th.m { text-align: center; width: 13mm; }
+td.was { color: #9A968E; }
+td.now { color: #0E5B45; font-weight: 600; }
+.key { font-size: 8.5pt; color: #6B6862; margin-top: 3mm; }
+.feat { display: grid; grid-template-columns: 1fr 58mm; gap: 7mm; padding: 6mm 0; border-top: 1px solid #F0EDE7; page-break-inside: avoid; }
+.feat:first-of-type { border-top: 0; }
+.feat .n { display: block; font-size: 8.5pt; color: #9A968E; margin-bottom: 1mm; }
+.feat dl { margin: 3mm 0 0; display: grid; grid-template-columns: 30mm 1fr; gap: 1.5mm 4mm; font-size: 9pt; }
+.feat dt { color: #9A968E; }
+.feat dd { margin: 0; color: #3A3A37; }
+.crop { aspect-ratio: 880 / 1800; overflow: hidden; border: 1px solid #E8E4DF; border-radius: 2.5mm; position: relative; }
+.crop img { position: absolute; height: 100%; right: 0; top: 0; }
+.wideFeat { grid-template-columns: 1fr; }
+.full { border: 1px solid #E8E4DF; border-radius: 2.5mm; overflow: hidden; }
+.full img { width: 100%; display: block; }
+.cols { display: grid; grid-template-columns: 1fr 1fr; gap: 8mm; }
+.cols ul { margin: 0; padding-left: 4.5mm; }
+.cols li { margin-bottom: 1.6mm; }
+.small { font-size: 9pt; color: #3A3A37; }
+.five { counter-reset: f; list-style: none; padding: 0; margin: 0; }
+.five li { margin-bottom: 3mm; padding-left: 9mm; position: relative; }
+.five li::before { counter-increment: f; content: counter(f); position: absolute; left: 0; top: 0; width: 6mm; height: 6mm; border-radius: 50%; background: #0D1F16; color: #fff; font-size: 8pt; display: grid; place-items: center; }
+</style></head><body>
+<section class="cover">
+ <div class="eyebrow">Clavia · Internal · 17 October 2026</div>
+ <h1 style="margin-top:3mm">The review pane, grown into<br>a working add-in</h1>
+ <p class="lead">The third pane on a contract — Playbook, Ask Clavia — is where Clavia stands in for a Word add-in. We took every gap from the competitor research and built it into that pane, on top of what was there: the same cards, sheets, menus and toasts. Then we added what nobody has. Everything below runs on Acme’s redline of our MSA (REQ-149).</p>
+ <div class="shot"><img src="shots/01-overview.png"></div>
+ <div class="pts">
+  <div><b>Parity.</b> Run setup, progress, the playbook’s clause one click away, benchmarks against our own deals, their comments answered, sign-off, skills, defined terms, an issues list and a note for the requester.</div>
+  <div><b>Ahead.</b> What their changes add up to, countered as a package; counterparty history turned into a one-turn response; per-rule confidence; overrides that become playbook proposals; approvals that go stale.</div>
+ </div>
+</section>
+<section class="page">
+ <div class="eyebrow">Where we stand</div>
+ <h2>Before and after, against the field</h2>
+ <table><tr><th>Capability in the review</th><th class="m">Harvey</th><th class="m">Legora</th><th class="m">Microsoft</th><th class="m">GC AI</th><th class="m">Ivo</th><th class="m">Clavia before</th><th class="m">Clavia now</th></tr><tr><td>Run setup: side, paper, Strict / Deal-closing</td><td class="m">◐</td><td class="m">—</td><td class="m">—</td><td class="m">◐</td><td class="m">●</td><td class="m was">—</td><td class="m now">●</td></tr><tr><td>Stack playbooks (MSA + DPA)</td><td class="m">—</td><td class="m">—</td><td class="m">—</td><td class="m">—</td><td class="m">●</td><td class="m was">—</td><td class="m now">●</td></tr><tr><td>Reviewed progress, apply all</td><td class="m">●</td><td class="m">◐</td><td class="m">●</td><td class="m">●</td><td class="m">●</td><td class="m was">◐</td><td class="m now">●</td></tr><tr><td>View the playbook’s clause from the review</td><td class="m">●</td><td class="m">◐</td><td class="m">◐</td><td class="m">◐</td><td class="m">●</td><td class="m was">◐ hidden</td><td class="m now">●</td></tr><tr><td>Why a rule exists, on the card</td><td class="m">◐</td><td class="m">—</td><td class="m">—</td><td class="m">●</td><td class="m">●</td><td class="m was">—</td><td class="m now">●</td></tr><tr><td>Benchmark against our own deals</td><td class="m">●</td><td class="m">—</td><td class="m">—</td><td class="m">—</td><td class="m">●</td><td class="m was">—</td><td class="m now">●</td></tr><tr><td>Their comments read and answered</td><td class="m">—</td><td class="m">◐</td><td class="m">●</td><td class="m">◐</td><td class="m">●</td><td class="m was">—</td><td class="m now">●</td></tr><tr><td>Accept their change as a wording</td><td class="m">◐</td><td class="m">◐</td><td class="m">●</td><td class="m">◐</td><td class="m">●</td><td class="m was">—</td><td class="m now">●</td></tr><tr><td>Escalate to the rule’s owner, inline</td><td class="m">◐</td><td class="m">◐</td><td class="m">—</td><td class="m">—</td><td class="m">●</td><td class="m was">◐ rounds only</td><td class="m now">●</td></tr><tr><td>Approval goes stale when wording moves</td><td class="m">—</td><td class="m">—</td><td class="m">—</td><td class="m">—</td><td class="m">—</td><td class="m was">◐ intake</td><td class="m now">●</td></tr><tr><td>Skills with “/” in the review</td><td class="m">—</td><td class="m">●</td><td class="m">●</td><td class="m">●</td><td class="m">—</td><td class="m was">—</td><td class="m now">●</td></tr><tr><td>Defined terms and cross-references</td><td class="m">—</td><td class="m">—</td><td class="m">●</td><td class="m">◐</td><td class="m">◐</td><td class="m was">—</td><td class="m now">●</td></tr><tr><td>Issues list + note to the requester</td><td class="m">●</td><td class="m">—</td><td class="m">◐</td><td class="m">●</td><td class="m">●</td><td class="m was">—</td><td class="m now">●</td></tr><tr><td>What the changes add up to (cross-clause)</td><td class="m">—</td><td class="m">—</td><td class="m">—</td><td class="m">—</td><td class="m">—</td><td class="m was">—</td><td class="m now">●</td></tr><tr><td>Counterparty history → one-turn response</td><td class="m">◐</td><td class="m">—</td><td class="m">—</td><td class="m">—</td><td class="m">◐</td><td class="m was">—</td><td class="m now">●</td></tr><tr><td>Per-rule confidence on our own contracts</td><td class="m">—</td><td class="m">—</td><td class="m">—</td><td class="m">—</td><td class="m">—</td><td class="m was">—</td><td class="m now">●</td></tr><tr><td>Overrides → proposals → new playbook version</td><td class="m">◐</td><td class="m">—</td><td class="m">—</td><td class="m">◐</td><td class="m">◐</td><td class="m was">—</td><td class="m now">●</td></tr></table>
+ <p class="key">● has it · ◐ partly, early access or elsewhere in the product · — not found. Competitor columns are directional: Harvey, Legora and GC AI help centres are behind a login; Ivo’s is public. Research of 17 Oct 2026 (PLAYBOOK-RESEARCH.md).</p>
+ <h2 style="margin-top:7mm">The five, and where they show up</h2>
+ <ol class="five">
+  <li><b>Trade-offs across clauses.</b> The exposure line and Counter as a package (feature 3).</li>
+  <li><b>Counterparty memory.</b> Acme’s history and Close in one turn (feature 4).</li>
+  <li><b>A tested playbook.</b> Per-rule confidence on our own contracts (feature 8). The playbook’s own test tab is next.</li>
+  <li><b>A playbook that learns, with an owner.</b> Make this the playbook’s answer → proposal → Add to playbook as a new version (features 12–13).</li>
+  <li><b>Law changes that ripple.</b> A rule changed by a Horizon item says so on the card, with a link to it (Termination, HZ-231).</li>
+ </ol>
+</section>
+<section class="page"><div class="eyebrow">What we built</div><h2>Feature by feature</h2>
+<section class="feat"><div class="ft"><span class="n">01</span><h3>Run setup</h3>
+<p>One line under the playbook name says how the review was run: the published version, whose paper, our side, and Strict or Deal-closing. Click it to change any of them, stack up to two more playbooks (MSA + DPA), and re-run.</p><dl><dt>Who else</dt><dd>Harvey has Strict/Permissive; Ivo asks deal-context questions and stacks up to 3 playbooks. Microsoft and Legora have neither.</dd><dt>Why ours is better</dt><dd>Prefilled from the request (deal value, region, counterparty), so nobody fills in a form. Deal-closing changes which wording each card opens on: inside a fallback it offers “Accept their change”.</dd></dl></div><div class="crop"><img src="shots/02-setup.png"></div></section><section class="feat"><div class="ft"><span class="n">02</span><h3>Progress and finishing</h3>
+<p>“3 of 14 reviewed” sits beside the playbook name. The ⋯ menu finishes the job: apply every suggestion at once, mark all reviewed, download the issues list as a Word table, write a summary for the requester, save as v4.</p><dl><dt>Who else</dt><dd>Harvey shows reviewed/unreviewed; GC AI and Ivo export issues lists and memos.</dd><dt>Why ours is better</dt><dd>Reviewed means applied, accepted, dismissed, signed off or replied to — no extra checkbox to tick.</dd></dl></div><div class="crop"><img src="shots/15-finish.png"></div></section><section class="feat"><div class="ft"><span class="n">03</span><h3>The deal as a whole</h3>
+<p>Above the clauses, one line says what their changes add up to: “Together, their changes leave us uncapped for a data breach.” Counter as a package shows the three moves (§9, §7, §10) and applies them as one counter, with Undo.</p><dl><dt>Who else</dt><dd>Nobody. Every product reviewed checks one clause at a time.</dd><dt>Why ours is better</dt><dd>This is the first of our five: trade-offs across clauses. A lawyer sees the exposure before reading twelve verdicts.</dd></dl></div><div class="crop"><img src="shots/07-exposure.png"></div></section><section class="feat"><div class="ft"><span class="n">04</span><h3>Counterparty memory</h3>
+<p>A second line knows Acme: usually 3 turns, always pushes on the cap and payment. Close in one turn accepts the 6 changes that sit inside our playbook and counters the 4 outside it with our fallbacks — “Expected: 1 turn instead of 3.”</p><dl><dt>Who else</dt><dd>Luminance remembers the counterparty; Ivo estimates extra turns per position. Neither turns it into the response.</dd><dt>Why ours is better</dt><dd>Second of our five, inside the review rather than a dashboard.</dd></dl></div><div class="crop"><img src="shots/08-close.png"></div></section><section class="feat"><div class="ft"><span class="n">05</span><h3>A fuller clause card</h3>
+<p>Each clause now carries why we hold the position, what our own signed deals agreed (“12 months in 8, 24 months in 4… never uncapped”), and their comment from the Word file, answered in place. The redundant “Their position” card is gone.</p><dl><dt>Who else</dt><dd>Harvey and Ivo benchmark against executed deals; GC AI stores rationale; Ivo and Claude for Word read comment bubbles.</dd><dt>Why ours is better</dt><dd>All three on one card, in a few quiet lines, each one click from its source.</dd></dl></div><div class="crop"><img src="shots/03-card-top.png"></div></section><section class="feat"><div class="ft"><span class="n">06</span><h3>The playbook’s own clause</h3>
+<p>“View in playbook” opens the clause as the playbook defines it, in the pane’s bottom sheet: why it holds, the starting position, what is not acceptable and each fallback, with the redline that gets the contract there and Apply.</p><dl><dt>Who else</dt><dd>Harvey cites the rule each clause matched.</dd><dt>Why ours is better</dt><dd>You asked for this: the playbook was invisible from the review. Now every clause is one click from its rule, and its version (“v4 · Published”).</dd></dl></div><div class="crop"><img src="shots/10-rule-sheet.png"></div></section><section class="feat"><div class="ft"><span class="n">07</span><h3>Our deals behind a number</h3>
+<p>See deals lists the twelve signed MSAs over £1M behind the benchmark line, with what each agreed for this clause.</p><dl><dt>Who else</dt><dd>Ivo shows a percentile; Harvey a precedent chart.</dd><dt>Why ours is better</dt><dd>Plain list a lawyer can quote from in the next email.</dd></dl></div><div class="crop"><img src="shots/11-deals.png"></div></section><section class="feat"><div class="ft"><span class="n">08</span><h3>How sure Clavia is</h3>
+<p>Where Clavia has matched our lawyers less often on past contracts, the card says so: “Check this one: Clavia matched your lawyers on 19 of 28 past contracts for this rule.” Strong rules say nothing.</p><dl><dt>Who else</dt><dd>Nobody shows accuracy per rule on the customer’s own contracts. Ironclad validates once, before go-live.</dd><dt>Why ours is better</dt><dd>Third of our five, as it appears to the reviewer. The playbook-side test bench is next.</dd></dl></div><div class="crop"><img src="shots/09-weak.png"></div></section><section class="feat"><div class="ft"><span class="n">09</span><h3>The card’s foot</h3>
+<p>Edit with AI and a quiet Not right? (wrong position, wrong clause, too aggressive, not aggressive enough) on the left; Ask Grace and Apply on the right. Ask appears only where the clause is outside the playbook.</p><dl><dt>Who else</dt><dd>Ivo has thumbs-down per markup; escalation is a text field almost everywhere.</dd><dt>Why ours is better</dt><dd>Feedback is logged against the rule for its owner, not lost.</dd></dl></div><div class="crop"><img src="shots/04-card-foot.png"></div></section><section class="feat"><div class="ft"><span class="n">10</span><h3>Sign-off</h3>
+<p>Ask Grace opens a card: who decides (from the playbook’s escalation role), what they ask in one line, what we would offer, and Clavia’s view, with an optional note. Send puts it in Teams.</p><dl><dt>Who else</dt><dd>Ivo Collaborate (early access) has Settle / Counter / Escalate. Others route nothing.</dd><dt>Why ours is better</dt><dd>The owner sees the decision, not the document.</dd></dl></div><div class="crop"><img src="shots/05-signoff.png"></div></section><section class="feat"><div class="ft"><span class="n">11</span><h3>Approved, and stale when it changes</h3>
+<p>The row says “With Grace”, then “Grace approved”, with her note on the card. If the wording later changes, it says “Grace approved different wording · Ask again”. Replying to Acme’s comment offers Clavia’s reply as one chip; the box starts empty.</p><dl><dt>Who else</dt><dd>No one else marks an approval stale when the terms move.</dd><dt>Why ours is better</dt><dd>Already ours in Intake; now in the review where the wording changes.</dd></dl></div><div class="crop"><img src="shots/06-approved-reply.png"></div></section><section class="feat"><div class="ft"><span class="n">12</span><h3>Their change, accepted — and taught back</h3>
+<p>Where their wording sits inside the playbook, “Accept their change” is one of the wordings on offer. When you pick something other than Clavia’s pick, the card asks “Make this the playbook’s answer?”</p><dl><dt>Who else</dt><dd>GC AI’s Smart Check promotes one finding; Harvey’s update-from-deals is waitlisted.</dd><dt>Why ours is better</dt><dd>Fourth of our five: overrides become evidence, at the moment of the decision.</dd></dl></div><div class="crop"><img src="shots/17-override.png"></div></section><section class="feat wideFeat"><div class="ft"><span class="n">13</span><h3>Proposals on the playbook</h3>
+<p>The playbook shows “1 change proposed from reviews”. Each card says what, from which review and counterparty, by whom; Add to playbook saves a new version (“New fallback on Fees and Payment”), Dismiss has Undo.</p><dl><dt>Who else</dt><dd>No competitor documents an approval step for changing a playbook.</dd><dt>Why ours is better</dt><dd>The loop closes: review → proposal → owner → new version → the next review.</dd></dl></div><div class="full wide"><img src="shots/18-proposal.png"></div></section><section class="feat"><div class="ft"><span class="n">14</span><h3>Skills in Ask Clavia</h3>
+<p>Type / in Ask for skills: summarise their changes, check defined terms, pull out obligations and deadlines, draft the issues list.</p><dl><dt>Who else</dt><dd>Microsoft’s Copilot for Legal ships 20 skills; Legora and GC AI use “/” too.</dd><dt>Why ours is better</dt><dd>Each answers from this contract, each line pointing at its clause.</dd></dl></div><div class="crop"><img src="shots/12-slash.png"></div></section><section class="feat"><div class="ft"><span class="n">15</span><h3>Defined terms, checked</h3>
+<p>Reads §1’s definitions and every cross-reference. On Acme’s MSA: Order Form, Subscription Term and Security Breach are used but never defined; all three cross-references point to the right clause.</p><dl><dt>Who else</dt><dd>Microsoft check-defined-terms; Definely.</dd><dt>Why ours is better</dt><dd>This one is real logic, not scripted: it reads the contract as it stands, redlines included.</dd></dl></div><div class="crop"><img src="shots/13-terms.png"></div></section><section class="feat"><div class="ft"><span class="n">16</span><h3>Their changes, in plain words</h3>
+<p>What they changed, clause by clause, in one line each: “A 24-month cap, with unlimited liability for breaches of §7.”</p><dl><dt>Who else</dt><dd>Claude for Word summarises redlines by severity; Harvey shows every counterparty change.</dd><dt>Why ours is better</dt><dd>Written the way counsel would say it to a GC.</dd></dl></div><div class="crop"><img src="shots/14-changes.png"></div></section><section class="feat wideFeat"><div class="ft"><span class="n">17</span><h3>A note for the requester</h3>
+<p>Five plain lines for Grace from where the review stands: what they sent, what we countered, the one point that matters, what is with whom, what is left.</p><dl><dt>Who else</dt><dd>GC AI drafts emails; Ivo writes memos.</dd><dt>Why ours is better</dt><dd>Generated from the review’s real state; Copy, or open it in Outlook as a draft.</dd></dl></div><div class="full wide"><img src="shots/16-summary.png"></div></section>
+</section>
+<section class="page">
+ <div class="eyebrow">Honest notes</div>
+ <h2>What is real, what is scripted, what is next</h2>
+ <div class="cols">
+  <div><h3>Real, in the prototype</h3><ul class="small">
+   <li>Setup, re-run, stacking, Strict / Deal-closing changing each card’s default.</li>
+   <li>Progress, filters (Their changes, Not reviewed), Apply all, Mark all reviewed.</li>
+   <li>Accept their change, sign-off states including stale, replies saved as For-them comments.</li>
+   <li>Defined terms, cross-references, obligations and their-changes skills read the contract as it stands.</li>
+   <li>Issues list downloads as a Word table; the requester note is built from the review’s state.</li>
+   <li>Proposals reach the playbook; Add to playbook saves a real new version.</li>
+  </ul></div>
+  <div><h3>Scripted for the demo</h3><ul class="small">
+   <li>Rationale, benchmarks, confidence figures, Acme’s history and comments, the exposure line (review-plus-data.js).</li>
+   <li>Grace’s approval arrives six seconds later; Teams and Outlook are toasts.</li>
+   <li>There is still no model behind the review; the five seeded reviews are precomputed.</li>
+  </ul>
+  <h3 style="margin-top:5mm">Next</h3><ul class="small">
+   <li>Verdicts on an uploaded counterparty markup (today a round from an upload has none).</li>
+   <li>The playbook’s Test tab: the golden set behind the confidence figures.</li>
+   <li>Approvals across contracts, once the Approvals tab is shown again.</li>
+   <li>The same pane inside Word.</li>
+  </ul></div>
+ </div>
+ <h3 style="margin-top:8mm">Design review</h3>
+ <p class="small">Two rounds on the pane. Fixed: two class names that collided with existing styles; type sizes snapped to the pane’s 12 / 13 / 14; deal lines aligned to the clause names (both at the same ink edge); native titles replaced with house tooltips; a duplicate reviewed tick beside “Grace approved”; sign-off offered only outside the playbook; setup no longer assumes our paper on an NDA on theirs. Removed at your request: the “Their position” card. Audit: no boxes inside boxes, no grey fills, nothing clipped, every icon button has a tooltip.</p>
+ <h3 style="margin-top:5mm">Try it</h3>
+ <p class="small">http://localhost:4325/#requests/REQ-149 — open Limitation of Liability, Ask Grace, reply to Acme, Counter as a package, then ⋯ → Summary. Proposals: http://localhost:4325/#playbooks/saas.</p>
+</section>
+</body></html>

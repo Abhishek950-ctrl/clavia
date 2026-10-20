@@ -1,0 +1,312 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>AI Meetings — demo</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@300..700&family=Spectral:wght@300;400&display=swap">
+<style>
+  :root{
+    --paper:#FFFFFF; --ink:#1A1A18; --soft:#6B6862; --faint:#9A968E; --line:#E8E4DF;
+    --sans:"Geist",ui-sans-serif,-apple-system,system-ui,sans-serif;
+    --serif:"Spectral",ui-serif,Georgia,serif;
+    --cap-h:112px;
+  }
+  *{box-sizing:border-box}
+  html,body{height:100%;margin:0;background:var(--paper);color:var(--ink);
+    font-family:var(--sans);-webkit-font-smoothing:antialiased;overflow:hidden}
+  #stage{position:absolute;inset:0 0 var(--cap-h) 0;background:var(--paper)}
+  iframe{position:absolute;inset:0;width:100%;height:100%;border:0;display:block;
+    opacity:0;transition:opacity 420ms cubic-bezier(.2,.7,.2,1)}
+  iframe[data-on="true"]{opacity:1}
+
+  /* ── the caption: one line of what is being said, under the picture ── */
+  #cap{position:absolute;left:0;right:0;bottom:0;height:var(--cap-h);
+    display:flex;align-items:center;gap:26px;
+    padding:0 clamp(28px,5vw,90px);
+    background:var(--paper);border-top:1px solid var(--line)}
+  #cap-t{flex:1;min-width:0;font-size:clamp(15px,1.5vw,21px);line-height:1.45;
+    letter-spacing:-.011em;color:var(--ink);max-width:92ch}
+  #cap-t b{font-weight:500}
+  #cap-n{flex:none;font-size:12px;letter-spacing:.12em;color:var(--faint);
+    font-variant-numeric:tabular-nums}
+  #bar{position:absolute;left:0;bottom:0;height:2px;background:var(--ink);width:0;
+    transition:width 240ms linear}
+
+  /* ── the front door: autoplay needs one press, and a take needs a
+        countdown so the recording does not start mid-sentence ── */
+  #gate{position:absolute;inset:0;display:grid;place-items:center;background:var(--paper);
+    z-index:5;text-align:center}
+  #gate h1{font-family:var(--serif);font-weight:300;font-size:clamp(34px,5vw,64px);
+    letter-spacing:-.02em;margin:0 0 10px}
+  #gate p{margin:0 0 30px;color:var(--soft);font-size:15px;line-height:1.6}
+  #gate p b{font-weight:500;color:var(--ink)}
+  .btn{appearance:none;cursor:pointer;font:inherit;font-size:14px;font-weight:550;
+    height:44px;padding:0 22px;border-radius:999px;border:1px solid var(--ink);
+    background:var(--ink);color:#fff}
+  .btn.ghost{background:none;color:var(--ink);border-color:var(--line);margin-left:10px}
+  #count{position:absolute;inset:0;display:none;place-items:center;background:var(--paper);
+    z-index:6;font-family:var(--serif);font-size:clamp(80px,14vw,190px);font-weight:300}
+  #count[data-on="true"]{display:grid}
+  .hint{position:absolute;left:0;right:0;bottom:26px;text-align:center;font-size:12.5px;
+    color:var(--faint)}
+</style>
+</head>
+<body>
+
+<div id="stage">
+  <iframe id="deck" title="Slides"></iframe>
+  <iframe id="app" title="App"></iframe>
+</div>
+
+<div id="cap"><p id="cap-t"></p><span id="cap-n"></span><i id="bar"></i></div>
+
+<div id="count" data-on="false"><span id="count-n">3</span></div>
+
+<div id="gate">
+  <div>
+    <h1>AI&nbsp;Meetings</h1>
+    <p>A four minute walkthrough that plays itself.<br>
+      Start your screen recording, then press <b>Play</b> — it counts down from three.</p>
+    <button class="btn" id="play">Play</button>
+    <button class="btn ghost" id="playNow">Play without countdown</button>
+    <p class="hint">Space pauses · ← → step · R restarts</p>
+  </div>
+</div>
+
+<script>
+(() => {
+const DECK_SRC = '_deck.html';
+const APP_SRC  = 'index.html';
+
+const deck = document.getElementById('deck');
+const app  = document.getElementById('app');
+const capT = document.getElementById('cap-t');
+const capN = document.getElementById('cap-n');
+const bar  = document.getElementById('bar');
+
+/* ── driving the app ───────────────────────────────────────────────
+   Same origin, so the demo reaches into the frame the way the desktop
+   shell does: the hash for the page, a click for the control. Every
+   step is defensive — a missed element skips rather than stops the
+   take, because a frozen demo is worse than a missing beat. */
+const doc = () => { try { return app.contentDocument; } catch (_) { return null; } };
+const q = (sel) => doc()?.querySelector(sel) || null;
+const qq = (sel) => [...(doc()?.querySelectorAll(sel) || [])];
+const click = (sel) => { const el = typeof sel === 'string' ? q(sel) : sel; el?.click(); return !!el; };
+/* The app rewrites its own hash once it has routed, so setting the hash
+   and hoping is unreliable. Same origin means its router can be called
+   directly, which is what the address bar does anyway. */
+const win = () => { try { return app.contentWindow; } catch (_) { return null; } };
+const route = (h) => {
+  show('app');
+  const w = win(); if (!w) return;
+  if (typeof w.briefRoute === 'function' && w.briefRoute(h)) return;
+  try { w.location.hash = h; } catch (_) {}
+};
+const hash = (h) => { show('app'); try { app.contentWindow.location.hash = h; } catch (_) {} };
+const MEETING = 'Halden — expansion pricing review';
+/* <name>::<tab>::<what to open> — the app's own address for a page, so
+   the tab and the thing on it arrive together and in the right order */
+const pageAt = (tab, act) => route('meeting/' + encodeURIComponent(
+  MEETING + '::' + (tab || 'brief') + (act ? '::' + act : '')));
+
+/* a dialog left open sits over every beat after it, so each beat that
+   moves on closes whatever the last one opened */
+const dismiss = () => {
+  const d = doc(); if (!d) return;
+  d.querySelectorAll('.sh-card, .spk-card').forEach((card) => {
+    const cancel = [...card.querySelectorAll('button')]
+      .find(b => /^(cancel|close|done)$/i.test(b.textContent.trim()));
+    if (cancel) return cancel.click();
+    card.closest('.sh-dim, .dim, .overlay')?.remove();
+  });
+  try {
+    d.dispatchEvent(new (app.contentWindow.KeyboardEvent)('keydown', { key: 'Escape', bubbles: true }));
+  } catch (_) {}
+};
+
+/* a control that is not there yet is not a missed beat: poll briefly,
+   then give up quietly */
+function when(sel, fn, tries = 24) {
+  const el = q(sel);
+  if (el) return fn(el);
+  if (tries <= 0) return;
+  setTimeout(() => when(sel, fn, tries - 1), 130);
+}
+
+/* typing, one character at a time, so it looks typed rather than pasted */
+function typeInto(sel, text, ms = 42) {
+  when(sel, (el) => {
+    el.focus(); el.value = '';
+    let i = 0;
+    const tick = () => {
+      if (i >= text.length) return;
+      el.value += text[i++];
+      el.dispatchEvent(new (app.contentWindow.Event)('input', { bubbles: true }));
+      setTimeout(tick, ms);
+    };
+    tick();
+  });
+}
+
+const show = (which) => {
+  deck.dataset.on = String(which === 'deck');
+  app.dataset.on = String(which === 'app');
+};
+const slide = (n) => { try { app.contentWindow; deck.contentWindow.show(n); } catch (_) {} };
+
+/* ── the take ──────────────────────────────────────────────────────
+   Times are seconds from the start. Say it plainly: this is a person
+   showing a colleague what the thing does, not a voiceover. */
+const BEATS = [
+ { t: 0,   say: "This is AI Meetings. Before I show you the product, here's the problem we're trying to fix.",
+   run: () => { show('deck'); slide(0); } },
+
+ { t: 9,   say: "A meeting is really three jobs. Before the call you're hunting through Slack, email and old documents to work out what it's even about.",
+   run: () => slide(1) },
+ { t: 17,  say: "During the call you're typing notes instead of listening, and when someone asks you something you don't know, you say you'll come back to them." },
+ { t: 26,  say: "And after the call you mean to write it up, and then you don't." },
+ { t: 32,  say: "This table is the same thing in order: what happens today, what happens with our product, why that matters, and which feature does it." },
+
+ { t: 42,  say: "There are eleven capabilities here. These are the real product, not mockups.",
+   run: () => slide(2) },
+ { t: 49,  say: "Ask anything is first because everything else depends on it. It reads Salesforce, HubSpot, Slack, Teams, Drive, SharePoint and OneDrive, so it knows what is going on with the account." },
+
+ { t: 60,  say: "So here is my calendar for today. Earlier calls at the top, what's coming up underneath, and a box where I can ask about any of them.",
+   run: () => { hash('meetings'); show('app'); } },
+
+ { t: 70,  say: "I'll ask what we agreed with Halden on pricing last quarter.",
+   run: () => typeInto('.mt-composer textarea, .mt-askwrap textarea', 'What did we agree with Halden on pricing last quarter?') },
+ { t: 78,  say: "It goes and looks in the CRM, in Drive, in Slack and in my email, and it tells me where it got the answer from.",
+   run: () => when('.mt-composer .send, .mt-askwrap .send', el => el.click()) },
+
+ { t: 88,  say: "My next call is with Halden in twenty minutes and I haven't prepared for it. I don't have to, because the brief is already written.",
+   run: () => pageAt('brief') },
+ { t: 97,  say: "It tells me where the deal is, the three pricing structures we've put together, and what they're going to push back on." },
+
+ { t: 106, say: "If I click on someone's name I get a page about them. What she does at Halden, what she's responsible for, and our history with her.",
+   run: () => pageAt('brief', 'person=' + encodeURIComponent('Rachel Okafor')) },
+ { t: 115, say: "It says she asked for a payment ramp last time and didn't get one, so she'll almost certainly ask again." },
+
+ { t: 124, say: "I join the call and press start. Nothing joins the meeting with me. There's no bot sitting in the participant list, so there's nothing to explain to the customer.",
+   run: () => { pageAt('brief'); setTimeout(() => when('.br-dock .rec-pill', el => el.click()), 700); } },
+ { t: 135, say: "It records from my laptop, and the transcript gets written while people talk.",
+   run: () => pageAt('transcript') },
+ { t: 143, say: "It also works out who is speaking. If it doesn't recognise a voice it shows me what that person said, I type the name once, and it fixes the whole transcript.",
+   run: () => pageAt('transcript', 'speakers') },
+
+ { t: 156, say: "Now the part I like. Rachel asks whether we had an outage in March. Normally that's where I'd say I'll check and come back to her.",
+   run: () => { dismiss(); pageAt('transcript', 'cues'); } },
+ { t: 166, say: "It picked the question up off the call and marked it red, because that's the kind of question that loses a deal." },
+ { t: 173, say: "I press Run.",
+   run: () => when('.cue-act', () => click(qq('.cue-act').find(b => /Run/.test(b.textContent)))) },
+ { t: 179, say: "One incident on the 14th of March, forty one minutes, no data lost, and their team got the postmortem the same week. So I answer her in the call, not a week later." },
+
+ { t: 191, say: "When the call ends I press stop, and the write-up is ready before I've got up from my desk.",
+   run: () => when('.br-dock .rec-pill', el => el.click()) },
+ { t: 200, say: "Where we landed, what's still open, and the things worth knowing. And I can edit any of it.",
+   run: () => { dismiss(); pageAt('summary'); } },
+
+ { t: 210, say: "It also pulls out what I said I would do. One click puts it on my to-do list.",
+   run: () => when('.br-act', el => el.scrollIntoView({ behavior: 'smooth', block: 'center' }), 60) },
+
+ { t: 220, say: "Then I share it. The brief, the transcript and the summary get shared. My own notes don't, and it says so on the dialog.",
+   run: () => { dismiss(); pageAt('summary', 'invite'); } },
+ { t: 232, say: "Once someone else is in, we're both on the same page instead of emailing a copy around. I can see who's here and what they're reading.",
+   run: () => { dismiss(); pageAt('summary', 'live'); } },
+ { t: 242, say: "And there's one switch to keep the assistant quiet while two people are talking to each other." },
+
+ { t: 250, say: "That's it. You walk into the call knowing what it's about, you answer the hard question while you're still on it, and the write-up and the follow-ups are done by the time you leave.",
+   run: () => { dismiss(); show('deck'); slide(15); } },
+ { t: 264, say: "" },
+];
+const END = 268;
+
+/* ── the clock ─────────────────────────────────────────────────── */
+let t0 = 0, raf = 0, at = -1, paused = false, pausedAt = 0;
+
+const clock = (s) => String(Math.floor(s / 60)) + ':' + String(Math.floor(s % 60)).padStart(2, '0');
+
+function paint(now) {
+  const i = BEATS.reduce((k, b, n) => (now >= b.t ? n : k), 0);
+  if (i !== at) {
+    at = i;
+    capT.textContent = BEATS[i].say;
+    try { BEATS[i].run?.(); } catch (e) { console.error('beat ' + i + ' failed', e); }
+  }
+  capN.textContent = clock(now) + ' / ' + clock(END);
+  bar.style.width = Math.min(100, now / END * 100) + '%';
+}
+
+function loop() {
+  if (paused) return;
+  const now = (performance.now() - t0) / 1000;
+  paint(now);
+  if (now < END) raf = requestAnimationFrame(loop);
+}
+
+function startAt(sec) {
+  cancelAnimationFrame(raf);
+  at = -1; paused = false;
+  t0 = performance.now() - sec * 1000;
+  loop();
+}
+
+/* ── controls ──────────────────────────────────────────────────── */
+addEventListener('keydown', (e) => {
+  if (e.key === ' ') {
+    e.preventDefault();
+    if (paused) { paused = false; t0 = performance.now() - pausedAt * 1000; loop(); }
+    else { paused = true; pausedAt = (performance.now() - t0) / 1000; cancelAnimationFrame(raf); }
+  }
+  if (e.key === 'ArrowRight') { const n = BEATS.find(b => b.t > (performance.now() - t0) / 1000); if (n) startAt(n.t); }
+  if (e.key === 'ArrowLeft') {
+    const now = (performance.now() - t0) / 1000;
+    const prev = [...BEATS].reverse().find(b => b.t < now - 1.2);
+    startAt(prev ? prev.t : 0);
+  }
+  if (e.key.toLowerCase() === 'r') startAt(0);
+});
+
+const gate = document.getElementById('gate');
+const countEl = document.getElementById('count');
+const countN = document.getElementById('count-n');
+
+function begin(withCount) {
+  gate.style.display = 'none';
+  const from = Math.max(0, +(new URLSearchParams(location.search).get('t') || 0));
+  if (!withCount) return startAt(from);
+  let n = 3;
+  countEl.dataset.on = 'true'; countN.textContent = n;
+  const tick = setInterval(() => {
+    n -= 1;
+    if (n === 0) {
+      clearInterval(tick);
+      countEl.dataset.on = 'false';
+      startAt(Math.max(0, +(new URLSearchParams(location.search).get('t') || 0)));
+    } else countN.textContent = n;
+  }, 1000);
+}
+document.getElementById('play').onclick = () => begin(true);
+document.getElementById('playNow').onclick = () => begin(false);
+
+/* ?t=88 starts part way in, for re-recording one section without
+   sitting through the rest; ?auto=1 skips the front door entirely */
+const P = new URLSearchParams(location.search);
+const FROM = Math.max(0, +(P.get('t') || 0));
+window.demo = { startAt, BEATS, END };
+if (P.get('auto')) { gate.style.display = 'none'; startAt(FROM); }
+else if (FROM) document.getElementById('play').textContent = 'Play from ' + clock(FROM);
+
+/* both frames load up front, so no beat waits on a page */
+deck.src = DECK_SRC;
+app.src = APP_SRC + '#meetings';
+deck.addEventListener('load', () => { try { deck.contentWindow.show(0); } catch (_) {} });
+show('deck');
+})();
+</script>
+</body>
+</html>

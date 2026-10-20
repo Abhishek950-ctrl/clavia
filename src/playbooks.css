@@ -1,0 +1,1055 @@
+/* ================================================================
+   Playbooks — the list, and a playbook open for editing.
+   Three positions carry the only colour: green for where we start,
+   red for what we will not accept, amber for where we can move to.
+   Everything else is ink on paper.
+================================================================ */
+:root {
+  --pos-preferred: #2F6B45;  --pos-preferred-bg: #E1EDE4;
+  --pos-walkaway:  #B4472F;  --pos-walkaway-bg:  #F1E2DC;
+  --pos-fallback:  #8A6B22;  --pos-fallback-bg:  #F1E9D8;
+  --pb-hover: #FAF9F6;
+  --pb-open: cubic-bezier(0.32, 0.72, 0, 1);
+}
+
+/* ── the three marks ── */
+.pb-mark {
+  width: 18px; height: 18px; border-radius: 50%; flex: none;
+  display: inline-grid; place-items: center;
+  transition: background var(--base) var(--ease), color var(--base) var(--ease);
+}
+.pb-mark svg { width: 14px; height: 14px; display: block; }
+.pb-mark[data-k="preferred"] { color: var(--pos-preferred); background: var(--pos-preferred-bg); }
+.pb-mark[data-k="walkaway"]  { color: var(--pos-walkaway);  background: var(--pos-walkaway-bg); }
+.pb-mark[data-k="fallback"]  { color: var(--pos-fallback);  background: var(--pos-fallback-bg); }
+.pb-mark.is-unset { color: #C9C4BB; background: none; box-shadow: inset 0 0 0 1px var(--line); }
+
+/* ================================================================
+   The list — the whole width, a table you scan
+================================================================ */
+.pb {
+  width: 100%;
+  padding: 34px 40px 72px;
+  animation: rise 420ms var(--ease-out) backwards;
+}
+.pb-head { align-items: center; border-bottom: 0; padding-bottom: 0; margin-bottom: 22px; }
+.pb-head .view-title { font-size: 28px; }
+.pb-new { flex: none; padding: 7px 13px 7px 11px; }
+
+/* the table is one bordered object: filter strip, column band, rows */
+.pb-card {
+  border: 1px solid var(--line); border-radius: 12px;
+  background: var(--surface);
+  box-shadow: 0 1px 2px rgba(20,20,19,.03);
+  overflow: hidden;
+}
+/* the filter: words along the card's top strip, the one you are on underlined */
+.pb-bar-list {
+  display: flex; align-items: flex-end; gap: 12px;
+  padding: 0 10px 0 4px;
+  border-bottom: 1px solid var(--line);
+}
+.pb-tabs { position: relative; display: flex; gap: 22px; padding-left: 12px; }
+.pb-tab {
+  appearance: none; border: 0; background: none; cursor: pointer;
+  display: inline-flex; align-items: baseline; gap: 6px;
+  font: inherit; font-size: 13.5px; color: var(--text-soft);
+  padding: 13px 0 12px;
+  transition: color var(--fast) var(--ease);
+}
+.pb-tab:hover { color: var(--text); }
+.pb-tab[aria-selected="true"] { color: var(--text); font-weight: 500; }
+.pb-tab-n { font-size: 12px; font-weight: 400; color: var(--text-faint); font-variant-numeric: tabular-nums; }
+.pb-tab-bar {
+  position: absolute; left: 0; bottom: -1px; height: 1.5px; width: 0;
+  background: var(--text); border-radius: 1px;
+}
+.pb-tab-bar.is-placed { transition: transform 280ms var(--pb-open), width 280ms var(--pb-open); }
+.pb-bar-list .pb-list-find { margin: 0 0 7px auto; }
+.pb-bar-list .pb-list-find.is-open { width: 240px; }
+
+/* one grid for the header and every row, so the columns hold */
+/* the name leads; the other columns give way to it before it truncates */
+.pb-table { --pb-cols: minmax(240px, 2.2fr) minmax(110px, 1fr) minmax(72px, 1fr) minmax(64px, 1fr) minmax(150px, 1fr) minmax(110px, 1fr) 40px; }
+.pb-tr {
+  display: grid; grid-template-columns: var(--pb-cols); align-items: center;
+  column-gap: 16px; padding: 0 12px;
+}
+.pb-thead { background: #FAF9F7; border-bottom: 1px solid var(--line); padding-top: 1px; padding-bottom: 1px; }
+.pb-tr { padding: 0 16px; }
+.pb-tbody > .pb-row:last-child { border-bottom: 0; }
+.pb-th {
+  appearance: none; border: 0; background: none; cursor: pointer;
+  justify-self: start; display: inline-flex; align-items: center; gap: 4px;
+  font: inherit; font-size: 12px; font-weight: 500; color: var(--text-faint);
+  padding: 8px 6px; margin-left: -6px; border-radius: 6px;
+  transition: color var(--fast) var(--ease), background var(--fast) var(--ease);
+}
+.pb-th:hover { color: var(--text-soft); background: var(--tint); }
+.pb-th.is-on { color: var(--text); }
+.pb-th-act { cursor: default; }
+.pb-th-ar { width: 11px; height: 11px; opacity: 0; transition: transform var(--base) var(--ease-out), opacity var(--fast) var(--ease); }
+.pb-th-ar svg { width: 11px; height: 11px; display: block; }
+.pb-th-ar[data-dir="-1"] { opacity: 1; transform: rotate(90deg); }
+.pb-th-ar[data-dir="1"]  { opacity: 1; transform: rotate(-90deg); }
+.pb-th:not(.is-on):hover .pb-th-ar { opacity: .5; transform: rotate(90deg); }
+
+.pb-row {
+  position: relative; cursor: pointer;
+  min-height: 60px;
+  border-bottom: 1px solid var(--line-soft);
+  overflow: hidden;
+  transition: background var(--fast) var(--ease), height 240ms var(--pb-open), opacity 200ms var(--ease);
+}
+.pb-row:hover { background: var(--pb-hover); }
+.pb-row:focus-visible { outline: 2px solid var(--text-faint); outline-offset: -2px; border-radius: 6px; }
+.pb-td { min-width: 0; display: flex; align-items: center; gap: 10px; font-size: 13.5px; color: var(--text-soft); }
+.pb-td-name { gap: 12px; }
+/* the playbook as a page, from the Jev experiment: a paper tile, ruled */
+.pb-doc-ic {
+  flex: none; position: relative;
+  width: 24px; height: 29px; border-radius: 4px;
+  border: 1px solid var(--line); background: #FCFCFB;
+  transition: border-color var(--fast) var(--ease), transform var(--base) var(--ease-out);
+}
+.pb-doc-ic::after {
+  content: ''; position: absolute; left: 5px; right: 5px; top: 7px; height: 12px;
+  background: repeating-linear-gradient(var(--line) 0 1px, transparent 1px 4px);
+}
+.pb-row:hover .pb-doc-ic { border-color: var(--line-strong); transform: translateY(-1px); }
+.pb-td-num, .pb-th-num { font-variant-numeric: tabular-nums; }
+.pb-row-name {
+  font-size: 13.5px; font-weight: 500; color: var(--text);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.pb-td-when { font-variant-numeric: tabular-nums; white-space: nowrap; }
+.pb-td-act { justify-content: flex-end; }
+
+.pb-av { width: 24px; height: 24px; }
+.pb-av img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.pb-owner-n { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text); }
+
+/* status: a mark that says it before the word does */
+.pb-st { display: inline-flex; align-items: center; gap: 7px; font-size: 13px; color: var(--text); white-space: nowrap; }
+.pb-st-ic { width: 14px; height: 14px; flex: none; display: grid; place-items: center; }
+.pb-st-ic svg { width: 14px; height: 14px; display: block; }
+.pb-st[data-st="live"] .pb-st-ic { color: #3A8457; }
+.pb-st[data-st="draft"] .pb-st-ic { color: #C28A1E; }
+.pb-st[data-st="archived"] { color: var(--text-soft); }
+.pb-st[data-st="archived"] .pb-st-ic { color: #B5B0A7; }
+
+/* the actions are there when you are, and gone when you are not */
+.pb-row-more, .pb-icon-btn {
+  appearance: none; border: 0; background: none; cursor: pointer; flex: none;
+  width: 28px; height: 28px; border-radius: 6px;
+  display: grid; place-items: center; color: var(--text-soft);
+  transition: background var(--fast) var(--ease), color var(--fast) var(--ease), opacity var(--fast) var(--ease);
+}
+.pb-row-more svg, .pb-icon-btn svg { width: 16px; height: 16px; }
+.pb-row-more:hover, .pb-icon-btn:hover { background: var(--line-soft); color: var(--text); }
+.pb-row-more { opacity: 1; color: var(--text-faint); }
+.pb-row:hover .pb-row-more, .pb-row:focus-within .pb-row-more, .pb-row-more[aria-expanded="true"] { opacity: 1; }
+.pb-row.is-new { animation: pbArrive 520ms var(--ease-out) backwards, pbGlow 1600ms var(--ease) 200ms; }
+.pb-row.is-leaving, .pb-cl.is-leaving {
+  opacity: 0; min-height: 0; padding-top: 0; padding-bottom: 0; border-bottom-color: transparent;
+  pointer-events: none;
+}
+@keyframes pbArrive { from { opacity: 0; transform: translateY(-6px); } to { opacity: 1; transform: none; } }
+@keyframes pbGlow { 0%, 30% { background: #F6F1E6; } 100% { background: transparent; } }
+.pb-empty { padding: 28px 12px; color: var(--text-soft); font-size: 13.5px; }
+
+/* ── New playbook: three ways in ── */
+.pb-new[aria-expanded="true"] { background: var(--rail-bg-active-solid); border-color: var(--rail-bg-active-solid); }
+.pb-ways { width: 340px; padding: 6px; }
+.pb-way {
+  appearance: none; border: 0; background: none; cursor: pointer; text-align: left;
+  width: 100%; display: flex; align-items: flex-start; gap: 12px;
+  font: inherit; color: var(--text);
+  padding: 10px 10px 11px; border-radius: 9px; outline: 0;
+  transition: background var(--fast) var(--ease);
+}
+.pb-way:hover, .pb-way:focus-visible { background: var(--tint); }
+.pb-way-ic {
+  flex: none; width: 34px; height: 34px; border-radius: 9px;
+  display: grid; place-items: center;
+  background: var(--bg-sunk); color: var(--text-soft);
+  transition: background var(--fast) var(--ease), color var(--fast) var(--ease), transform var(--base) var(--ease-out);
+}
+.pb-way-ic svg { width: 17px; height: 17px; display: block; }
+.pb-way-ic .ico { width: 17px; height: 17px; }
+.pb-way[data-way="ai"] .pb-way-ic { background: #E6EFE9; }
+.pb-way-quill { width: 24px; height: 24px; }
+.pb-way-quill svg { width: 24px; height: 24px; }
+/* the tile keeps its colour on hover and deepens a step with the row;
+   only the glyph comes up to full ink */
+.pb-way:hover .pb-way-ic, .pb-way:focus-visible .pb-way-ic { background: #EAE6DF; color: var(--text); }
+.pb-way[data-way="ai"]:hover .pb-way-ic, .pb-way[data-way="ai"]:focus-visible .pb-way-ic { background: #DAE8DF; }
+.pb-way-t { display: flex; flex-direction: column; gap: 2px; min-width: 0; padding-top: 1px; }
+.pb-way-n { font-size: 13.5px; font-weight: 550; }
+.pb-way-d { font-size: 12.5px; line-height: 1.45; color: var(--text-soft); }
+/* the small one: two or three quick actions — a plain glyph and a name */
+.pb-ways--sm { width: auto; min-width: 176px; padding: 5px; }
+.pb-ways--sm .pb-way { align-items: center; gap: 9px; padding: 7px 12px 7px 9px; border-radius: 7px; }
+.pb-ways--sm .pb-way-ic,
+.pb-ways--sm .pb-way:hover .pb-way-ic, .pb-ways--sm .pb-way:focus-visible .pb-way-ic {
+  width: 16px; height: 16px; border-radius: 0; background: none;
+}
+.pb-ways--sm .pb-way-ic svg { width: 15px; height: 15px; }
+.pb-ways--sm .pb-way-t { gap: 0; padding-top: 0; }
+.pb-ways--sm .pb-way-n { font-size: 13px; font-weight: 400; white-space: nowrap; }
+
+/* ── a dialog: choosing a template ── */
+.pb-dim {
+  position: fixed; inset: 0; z-index: 150;
+  background: rgba(20, 20, 19, .28);
+  display: grid; place-items: start center; padding-top: 14vh;
+  animation: fadeIn 180ms var(--ease) backwards;
+}
+.pb-dim.is-closing { opacity: 0; transition: opacity 150ms var(--ease); }
+.pb-dlg {
+  width: min(600px, calc(100vw - 32px));
+  background: var(--surface); border-radius: 16px;
+  box-shadow: 0 24px 60px -20px rgba(20,20,19,.35), 0 2px 6px rgba(20,20,19,.06);
+  padding: 16px 12px 12px;
+  animation: pbDlgIn 260ms var(--pb-open) backwards;
+}
+@keyframes pbDlgIn { from { opacity: 0; transform: translateY(8px) scale(.985); } to { opacity: 1; transform: none; } }
+.pb-dlg-head { display: flex; align-items: center; justify-content: space-between; padding: 0 4px 10px 10px; }
+.pb-dlg-t { margin: 0; font-family: var(--serif); font-weight: 400; font-size: 22px; letter-spacing: -0.01em; }
+.pb-tpls { display: flex; flex-direction: column; gap: 2px; }
+.pb-tpl {
+  appearance: none; border: 0; background: none; cursor: pointer; text-align: left;
+  display: flex; align-items: center; gap: 14px; width: 100%;
+  font: inherit; color: var(--text);
+  padding: 12px 12px; border-radius: 10px; outline: 0;
+  transition: background var(--fast) var(--ease);
+}
+.pb-tpl:hover, .pb-tpl:focus-visible { background: var(--tint); }
+.pb-tpl-ic { width: 16px; height: 16px; color: var(--text-faint); }
+.pb-tpl-t { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.pb-tpl-n { font-size: 14px; font-weight: 500; }
+.pb-tpl-d { font-size: 12.5px; color: var(--text-soft); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pb-tpl-ct { flex: none; font-size: 12px; color: var(--text-faint); font-variant-numeric: tabular-nums; }
+
+/* ── a dialog: asking before a delete that takes other things with it ── */
+.pb-confirm { width: min(440px, calc(100vw - 32px)); padding: 22px 22px 18px; }
+.pb-confirm .pb-dlg-t { font-size: 21px; line-height: 1.25; overflow-wrap: anywhere; }
+.pb-confirm-lead { margin: 8px 0 0; font-size: 13.5px; line-height: 1.55; color: var(--text-soft); }
+.pb-confirm-list {
+  list-style: none; margin: 14px 0 0; padding: 4px 0;
+  border: 1px solid var(--line); border-radius: 10px;
+  max-height: min(264px, 40vh); overflow-y: auto;
+}
+.pb-confirm-list li { display: flex; align-items: baseline; gap: 10px; padding: 7px 14px; font-size: 13px; }
+.pb-confirm-n { flex: none; min-width: 24px; font-size: 12px; color: var(--text-faint); font-variant-numeric: tabular-nums; }
+.pb-confirm-t { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pb-confirm-foot { display: flex; justify-content: flex-end; gap: 8px; margin-top: 18px; }
+.pb-btn {
+  appearance: none; cursor: pointer; font: inherit; font-size: 13px; font-weight: 500;
+  height: 34px; padding: 0 14px; border-radius: 9px;
+  border: 1px solid var(--line-strong); background: var(--surface); color: var(--text);
+  transition: background var(--fast) var(--ease), border-color var(--fast) var(--ease);
+}
+.pb-btn:hover { background: var(--tint); }
+.pb-btn--danger { background: var(--pos-walkaway); border-color: var(--pos-walkaway); color: #fff; }
+.pb-btn--danger:hover { background: #9E3D28; border-color: #9E3D28; }
+.pb-btn--primary { background: var(--rail-bg); border-color: var(--rail-bg); color: #fff; }
+.pb-btn--primary:hover:not(:disabled) { background: var(--rail-bg-active-solid); border-color: var(--rail-bg-active-solid); }
+.pb-btn:disabled { opacity: .45; cursor: default; }
+/* renaming: the name in one field, selected, ready to be typed over */
+.pb-rename-in {
+  display: block; width: 100%; box-sizing: border-box; margin-top: 16px;
+  font: inherit; font-size: 14.5px; color: var(--text);
+  height: 40px; padding: 0 12px; border-radius: 10px;
+  border: 1px solid var(--line-strong); background: var(--surface); outline: 0;
+  transition: border-color var(--fast) var(--ease), box-shadow var(--fast) var(--ease);
+}
+.pb-rename-in:focus { border-color: var(--text-faint); box-shadow: 0 0 0 3px rgba(20,20,19,.05); }
+.pb-rename-in::placeholder { color: var(--text-faint); }
+
+/* ── Build with AI: the New Chat page, asked about a playbook ── */
+.pb-create { position: relative; }
+.pb-create-back {
+  position: absolute; top: 18px; left: 22px;
+  appearance: none; border: 0; background: none; cursor: pointer;
+  display: inline-flex; align-items: center; gap: 4px;
+  font: inherit; font-size: 13px; color: var(--text-soft);
+  padding: 5px 9px 5px 5px; border-radius: 7px;
+  transition: background var(--fast) var(--ease), color var(--fast) var(--ease);
+}
+.pb-create-back:hover { background: var(--tint); color: var(--text); }
+.pb-create-back-ar { width: 14px; height: 14px; transform: rotate(180deg); }
+.pb-create-back-ar svg { width: 14px; height: 14px; display: block; }
+/* no model picker here to push it, so the send button takes the far end itself */
+.pb-create .askbar .send { margin-left: auto; }
+.pb-create-ask { transition: border-color .2s var(--ease), box-shadow .2s var(--ease), background .2s var(--ease); }
+.pb-create-ask.is-over { border-color: var(--gold-tint); background: #FDFBF6; }
+.pb-create-ask.is-busy textarea { color: var(--text-soft); }
+.pb-create-ask.is-nudge { animation: pbNudge 380ms var(--ease-out); }
+@keyframes pbNudge {
+  20% { transform: translateX(-5px); } 45% { transform: translateX(4px); }
+  70% { transform: translateX(-2px); } 100% { transform: none; }
+}
+.pb-create-status {
+  min-height: 22px; margin-top: 14px; text-align: center;
+  font-size: 13.5px; color: var(--text-soft);
+}
+.pb-step { display: inline-block; animation: pbStep 320ms var(--ease-out) backwards; }
+@keyframes pbStep { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: none; } }
+
+/* a file picker for a connected source */
+.pb-src { width: min(480px, calc(100vw - 32px)); padding-bottom: 12px; }
+.pb-src-head { display: flex; align-items: center; gap: 12px; }
+.pb-src-logo { width: 36px; height: 36px; border-radius: 9px; display: grid; place-items: center;
+  background: var(--bg-sunk); }
+.pb-src-logo svg { display: block; }
+.pb-src-t { font-size: 19px; line-height: 1.2; }
+.pb-src-where { display: block; font-size: 12.5px; color: var(--text-faint); }
+.pb-src-list { display: flex; flex-direction: column; gap: 1px; padding: 4px 0 8px; }
+.pb-src-f {
+  appearance: none; border: 0; background: none; cursor: pointer; text-align: left;
+  display: flex; align-items: center; gap: 12px; width: 100%;
+  font: inherit; font-size: 13.5px; color: var(--text);
+  padding: 10px 12px; border-radius: 9px; outline: 0;
+  transition: background var(--fast) var(--ease);
+}
+.pb-src-f:hover, .pb-src-f:focus-visible { background: var(--tint); }
+.pb-src-box {
+  flex: none; width: 17px; height: 17px; border-radius: 5px;
+  box-shadow: inset 0 0 0 1.3px var(--line-strong); background: var(--surface);
+  display: grid; place-items: center; color: transparent;
+  transition: background var(--fast) var(--ease), box-shadow var(--fast) var(--ease), color var(--fast) var(--ease);
+}
+.pb-src-box svg { width: 12px; height: 12px; display: block; }
+.pb-src-f[aria-checked="true"] .pb-src-box { background: var(--rail-bg); box-shadow: none; color: var(--sand); }
+.pb-src-n { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pb-src-foot { display: flex; justify-content: flex-end; gap: 6px; padding: 8px 4px 0; border-top: 1px solid var(--line-soft); }
+
+.pb-refs { display: flex; flex-wrap: wrap; gap: 6px; padding: 0 22px 2px; }
+.pb-refs:empty { display: none; }
+.pb-ref {
+  display: inline-flex; align-items: center; gap: 4px; max-width: 280px;
+  font-size: 12.5px; color: var(--text);
+  background: var(--bg-sunk); border-radius: 6px;
+  padding: 3px 4px 3px 9px;
+  animation: pbStep 220ms var(--ease-out) backwards;
+}
+.pb-ref-n { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pb-ref button {
+  appearance: none; border: 0; background: none; cursor: pointer;
+  width: 18px; height: 18px; border-radius: 4px;
+  color: var(--text-faint); font-size: 14px; line-height: 1;
+}
+.pb-ref button:hover { background: var(--line); color: var(--text); }
+
+@media (max-width: 980px) {
+  .pb { padding: 28px 22px 64px; }
+  .pb-table { --pb-cols: minmax(0, 1fr) 104px 52px 52px 28px 110px 32px; }
+  .pb-owner-n { display: none; }
+}
+
+/* search: a glass that becomes a field */
+.pb-find {
+  display: flex; align-items: center;
+  height: 32px; width: 32px; border-radius: 8px;
+  border: 1px solid transparent;
+  transition: width 280ms var(--pb-open), border-color var(--base) var(--ease), background var(--base) var(--ease);
+  overflow: hidden;
+}
+.pb-find-btn {
+  appearance: none; border: 0; background: none; cursor: pointer; flex: none;
+  width: 30px; height: 30px; display: grid; place-items: center;
+  color: var(--text-soft); border-radius: 7px;
+}
+.pb-find-btn svg { width: 15px; height: 15px; }
+.pb-find:not(.is-open) .pb-find-btn:hover { background: var(--tint); color: var(--text); }
+.pb-find input {
+  flex: 1; min-width: 0; border: 0; outline: 0; background: none;
+  font: inherit; font-size: 13px; color: var(--text); padding: 0 10px 0 0;
+  opacity: 0; transition: opacity var(--base) var(--ease);
+}
+.pb-find input::placeholder { color: var(--text-faint); }
+.pb-find input::-webkit-search-cancel-button { -webkit-appearance: none; }
+.pb-find.is-open { width: 210px; border-color: var(--line-strong); background: var(--surface); }
+.pb-find.is-open input { opacity: 1; }
+
+/* ── undo ── */
+.pb-toast { display: flex; align-items: center; gap: 14px; }
+.pb-toast-act {
+  appearance: none; border: 0; background: none; cursor: pointer;
+  font: inherit; font-weight: 550; color: var(--sand);
+  padding: 2px 4px; border-radius: 4px;
+}
+.pb-toast-act:hover { color: #fff; }
+
+@media (max-width: 860px) {
+  .pb-doc { padding: 28px 18px 110px; }
+  .pb-legend { display: none; }
+  .pb-cl-in { padding-left: 12px; }
+  .pb-find.is-open { width: 150px; }
+  .pb-crumb-up, .pb-crumb-sep { display: none; }
+}
+
+/* ================================================================
+   A playbook, as an artifact (playbook-view.js)
+   An index down the left; one sheet in the middle on a quiet ground;
+   every clause laid out as its positions, each in its own card.
+================================================================ */
+.deck-view[data-kind="playbook"] .artifact-shell { container-type: inline-size; }
+.artifact-shell > .pbv { min-height: 0; overflow: hidden; }
+.pbv {
+  position: relative;
+  display: grid; grid-template-columns: var(--pbv-idx-w, 280px) minmax(0, 1fr);
+  height: 100%; min-height: 0;
+  background: #F6F5F2;
+  /* the list's column closes and opens in one motion, the sheet riding along */
+  transition: grid-template-columns 360ms cubic-bezier(.4, 0, .1, 1);
+}
+.pbv.is-idx-hidden { grid-template-columns: 0px minmax(0, 1fr); }
+.pbv.is-resizing { transition: none; }
+/* the list's right edge is a handle: a hairline that thickens under the
+   pointer, wide enough to catch, and gone when the list is */
+.pbv-resize {
+  position: absolute; top: 0; bottom: 0; left: calc(var(--pbv-idx-w, 280px) - 4px);
+  width: 9px; z-index: 4; cursor: col-resize; outline: 0;
+}
+.pbv-resize::after {
+  content: ''; position: absolute; top: 0; bottom: 0; left: 3px; width: 2px;
+  background: var(--line-strong); opacity: 0;
+  transition: opacity var(--fast) var(--ease), background var(--fast) var(--ease);
+}
+.pbv-resize:hover::after, .pbv-resize:focus-visible::after { opacity: 1; }
+.pbv.is-resizing .pbv-resize::after { opacity: 1; background: var(--text-faint); }
+.pbv.is-resizing, .pbv.is-resizing * { cursor: col-resize !important; user-select: none; }
+.pbv.is-idx-hidden .pbv-resize { display: none; }
+/* pinned, so hiding the index never shifts the sheet into its column. The
+   wrap is the column: it clips, and holds the list by its right edge so the
+   list slides out to the left at its full width rather than being squeezed. */
+.pbv-idx-wrap { grid-column: 1; min-width: 0; min-height: 0; overflow: hidden; display: flex; justify-content: flex-end; }
+.pbv-scroll { grid-column: 2; }
+:where(.pbv) :is(input, textarea) {
+  display: block; width: 100%; font: inherit; color: var(--text);
+  background: none; border: 0; outline: 0; resize: none; padding: 0; margin: 0;
+}
+:where(.pbv) textarea { overflow: hidden; field-sizing: content; min-height: 1lh; }
+:where(.pbv) ::placeholder { color: var(--text-faint); }
+/* like a document: the caret is the only sign you are editing */
+.pbv :is(input, textarea):is(:focus, :focus-visible) { outline: none; box-shadow: none; }
+.pbv :is(input, textarea) { caret-color: var(--text); border-radius: 0; }
+
+.deck-view[data-kind="playbook"] .deck-title-name {
+  font-family: var(--font); font-size: 14.5px; font-weight: 550; letter-spacing: -0.005em;
+}
+/* the sheet is narrower than its box, so the box is pulled in to keep it close to the name */
+.pbv-kind { width: 22px; height: 22px; display: grid; place-items: center; margin: 0 -7px 0 6px; }
+.pbv-kind svg { width: 20px; height: 20px; display: block; }
+.pbv-back {
+  appearance: none; border: 0; background: none; cursor: pointer;
+  width: 30px; height: 30px; margin: 0 0 0 4px; border-radius: 8px;
+  display: grid; place-items: center; color: var(--text-soft);
+  transition: background var(--fast) var(--ease), color var(--fast) var(--ease), transform var(--base) var(--ease-out);
+}
+.pbv-back svg { width: 16px; height: 16px; }
+.pbv-back:hover { background: var(--tint); color: var(--text); }
+.pbv-back:hover svg { transform: translateX(-1px); }
+
+.pb-grow { flex: 1; min-width: 0; }
+
+.pbv-icon {
+  appearance: none; border: 0; background: none; cursor: pointer; flex: none;
+  width: 26px; height: 26px; border-radius: 6px; display: grid; place-items: center;
+  color: var(--text-faint);
+  transition: background var(--fast) var(--ease), color var(--fast) var(--ease), opacity var(--fast) var(--ease);
+}
+.pbv-icon svg { width: 15px; height: 15px; display: block; }
+.pbv-icon:hover { background: var(--tint); color: var(--text); }
+.pbv-panel-btn {
+  width: 30px; height: 30px; border-radius: 8px;
+  background: var(--surface); border: 1px solid var(--line); color: var(--text-soft);
+  box-shadow: 0 1px 1px rgba(20,20,19,.03);
+}
+.pbv-panel-btn { outline: 0; }
+.pbv-panel-btn:focus-visible { border-color: var(--text-faint); }
+.pbv-panel-btn:hover { background: var(--surface); border-color: var(--line-strong); color: var(--text); }
+
+/* ── the index ── */
+.pbv-idx {
+  flex: none; box-sizing: border-box; width: var(--pbv-idx-w, 280px);
+  overflow: hidden auto;
+  background: #FCFCFB; border-right: 1px solid var(--line);
+  padding: 14px 10px 32px;
+  transition: opacity 220ms var(--ease), visibility 0s;
+}
+/* folded away: it fades as it goes, and is out of reach once gone */
+.pbv.is-idx-hidden .pbv-idx { opacity: 0; visibility: hidden; transition: opacity 220ms var(--ease), visibility 0s 360ms; }
+.pbv-idx-head { display: flex; align-items: center; gap: 2px; padding: 0 2px 12px 10px; }
+.pbv-cap { font-size: 11px; font-weight: 500; letter-spacing: .08em; text-transform: uppercase; color: var(--text-faint); }
+/* the outline: a section and its number at the margin, its clauses one
+   step in under its name */
+.pbv-idx-list { display: flex; flex-direction: column; gap: 1px; }
+.pbv-idx-group[hidden] { display: none; }
+.pbv-idx-group + .pbv-idx-group { margin-top: 6px; }
+.pbv-idx-no {
+  flex: none; text-align: left;
+  color: var(--text-faint); font-variant-numeric: tabular-nums;
+  transition: opacity var(--fast) var(--ease);
+}
+
+.pbv-idx-sec {
+  position: relative;
+  display: flex; align-items: baseline; gap: 6px;
+  min-height: 32px; padding: 0 30px 0 10px;
+  border-radius: 7px;
+  transition: background var(--fast) var(--ease), box-shadow var(--fast) var(--ease);
+  touch-action: none; user-select: none;
+}
+.pbv-idx-sec:hover { background: var(--tint); }
+/* the number hugs its name: a digit's width, then a small gap */
+.pbv-idx-sec-no { width: 11px; font-size: 12px; }
+.pbv-idx-sec-t {
+  appearance: none; border: 0; background: none; cursor: pointer; text-align: left;
+  flex: 1; min-width: 0; display: flex; align-items: baseline;
+  /* the same ink as its clauses, a step up in weight; only the section
+     being read comes up to full ink */
+  font: inherit; font-size: 13px; font-weight: 500; color: var(--text-soft);
+  padding: 7px 0;
+  transition: color var(--fast) var(--ease);
+}
+.pbv-idx-sec:hover .pbv-idx-sec-t, .pbv-idx-sec[aria-current="true"] .pbv-idx-sec-t { color: var(--text); }
+.pbv-idx-sec-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* the fold: one chevron at the end of the row, down when open */
+.pbv-idx-fold, .pbv-idx-ren {
+  appearance: none; border: 0; background: none; cursor: pointer;
+  position: absolute; top: 50%; margin-top: -11px;
+  width: 22px; height: 22px; display: grid; place-items: center; color: var(--text-faint);
+  border-radius: 6px;
+  transition: opacity var(--fast) var(--ease), color var(--fast) var(--ease), background var(--fast) var(--ease);
+}
+.pbv-idx-fold { right: 4px; }
+.pbv-idx-fold svg { width: 12px; height: 12px; display: block; transition: transform 240ms var(--pb-open); }
+.pbv-idx-sec[data-open="true"] .pbv-idx-fold svg { transform: rotate(90deg); }
+.pbv-idx-ren { right: 27px; opacity: 0; }
+.pbv-idx-ren svg { width: 13px; height: 13px; display: block; }
+.pbv-idx-sec:hover .pbv-idx-ren, .pbv-idx-ren:focus-visible { opacity: 1; }
+.pbv-idx-fold:hover, .pbv-idx-ren:hover { color: var(--text); background: #E9E5DD; }
+/* the name gives the pencil room only while it is showing */
+.pbv-idx-sec:has(.pbv-idx-ren):hover { padding-right: 54px; }
+.pbv.is-dragging .pbv-idx-sec:has(.pbv-idx-ren):hover { padding-right: 30px; }
+/* renaming: the name is a field, in the same type */
+.pbv-idx-sec.is-renaming { background: var(--surface); box-shadow: inset 0 0 0 1px var(--line-strong); }
+.pbv-idx-sec.is-renaming .pbv-idx-ren, .pbv-idx-sec.is-renaming .pbv-idx-grip { display: none; }
+.pbv-idx-sec.is-renaming .pbv-idx-no { opacity: 1; }
+.pbv-idx-sec-in {
+  flex: 1; min-width: 0;
+  font: inherit; font-size: 13px; font-weight: 500; color: var(--text);
+  border: 0; outline: 0; background: none; padding: 7px 0; margin: 0;
+}
+
+/* a section's clauses: their numbers start under the section's name */
+.pbv-idx-items { display: flex; flex-direction: column; gap: 1px; padding: 0 0 4px; }
+.pbv-idx-items[hidden] { display: none; }
+.pbv-idx-items.is-opening { animation: pbvIdxOpen 240ms var(--pb-open); }
+@keyframes pbvIdxOpen { from { opacity: 0; transform: translateY(-5px); } to { opacity: 1; transform: none; } }
+.pbv-idx-it {
+  position: relative;
+  appearance: none; border: 0; background: none; cursor: pointer; text-align: left;
+  display: flex; align-items: baseline; gap: 6px; width: 100%;
+  font: inherit; font-size: 13px; color: var(--text-soft);
+  padding: 6px 10px 6px 27px; border-radius: 7px;
+  transition: background var(--fast) var(--ease), color var(--fast) var(--ease);
+  touch-action: none; user-select: none;
+}
+.pbv-idx-it .pbv-idx-no { min-width: 20px; font-size: 11.5px; }
+.pbv-idx-it:hover { background: var(--tint); color: var(--text); }
+.pbv-idx-it[aria-current="true"] { color: var(--text); font-weight: 500; }
+.pbv-idx-it[hidden] { display: none; }
+.pbv-idx-t { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* ── reordering ───────────────────────────────────────────────
+   Under the pointer a row shows a grip: it can be picked up. Carried,
+   it leaves a slot behind that the list opens and closes around. */
+.pbv-idx-grip {
+  position: absolute; left: 27px; top: 50%; width: 14px; height: 20px; margin-top: -10px;
+  display: grid; place-items: center; color: var(--text-faint);
+  opacity: 0; transition: opacity var(--fast) var(--ease), color var(--fast) var(--ease);
+  cursor: grab;
+}
+.pbv-idx-grip svg { width: 12px; height: 14px; display: block; }
+.pbv-idx-sec .pbv-idx-grip { left: 7px; }
+.is-editable .pbv-idx-it:hover .pbv-idx-grip, .is-editable .pbv-idx-sec:hover .pbv-idx-grip { opacity: 1; }
+.is-editable .pbv-idx-it:hover .pbv-idx-no, .is-editable .pbv-idx-sec:hover .pbv-idx-no { opacity: 0; }
+.pbv-idx-grip:hover { color: var(--text); }
+.pbv.is-dragging, .pbv.is-dragging * { cursor: grabbing !important; }
+.pbv.is-dragging .pbv-idx-it:hover { background: none; color: var(--text-soft); }
+.pbv.is-dragging .pbv-idx-sec:hover { background: none; }
+.pbv.is-dragging .pbv-idx-it:hover .pbv-idx-grip, .pbv.is-dragging .pbv-idx-sec:hover .pbv-idx-grip,
+.pbv.is-dragging .pbv-idx-sec:hover .pbv-idx-ren { opacity: 0; }
+.pbv.is-dragging .pbv-idx-it:hover .pbv-idx-no, .pbv.is-dragging .pbv-idx-sec:hover .pbv-idx-no { opacity: 1; }
+.pbv-idx-it.is-slot, .pbv.is-dragging .pbv-idx-it.is-slot:hover {
+  background: #EFE9DC; box-shadow: inset 0 0 0 1px #E2D8C2;
+}
+.pbv-idx-it.is-slot > * { visibility: hidden; }
+.pbv-idx-sec.is-drop, .pbv.is-dragging .pbv-idx-sec.is-drop:hover { background: #F3EAD6; box-shadow: inset 0 0 0 1px #E0D0A8; }
+.pbv-idx-list.is-sec-drag .pbv-idx-items { display: none; }
+.pbv-idx-group.is-slot .pbv-idx-sec, .pbv.is-dragging .pbv-idx-group.is-slot .pbv-idx-sec:hover {
+  background: #EFE9DC; box-shadow: inset 0 0 0 1px #E2D8C2;
+}
+.pbv-idx-group.is-slot .pbv-idx-sec > * { visibility: hidden; }
+.pbv-drag-ghost {
+  position: fixed; z-index: 500; pointer-events: none; margin: 0;
+  background: var(--surface); color: var(--text); font-weight: 500;
+  border-radius: 9px;
+  box-shadow: 0 1px 2px rgba(20,20,19,.08), 0 12px 28px -8px rgba(20,20,19,.28), 0 0 0 1px rgba(20,20,19,.06);
+  transform: scale(1.03) rotate(-.6deg);
+  transition: transform 160ms var(--ease-out), box-shadow 160ms var(--ease);
+  animation: pbvLift 160ms var(--ease-out);
+}
+.pbv-drag-ghost .pbv-idx-grip { opacity: 1; color: var(--text); }
+.pbv-drag-ghost .pbv-idx-fold, .pbv-drag-ghost .pbv-idx-ren { display: none; }
+.pbv-drag-ghost .pbv-idx-no { opacity: 0; }
+.pbv-drag-ghost .pbv-idx-sec-t { color: var(--text); }
+.pbv-drag-ghost.is-landing { transition: top 200ms var(--pb-open), left 200ms var(--pb-open), transform 200ms var(--pb-open), opacity 200ms var(--ease); transform: none; }
+@keyframes pbvLift { from { transform: none; box-shadow: none; } }
+
+/* ── the sheet ── */
+.pbv-scroll { position: relative; min-width: 0; overflow-y: auto; padding: 22px 32px 96px; }
+/* pinned to the corner of the view, not the page, so it is there however far
+   down you are; its top edge sits on the sheet's top edge before any scroll.
+   It arrives as the list finishes leaving. */
+.pbv-show-idx {
+  position: absolute; top: 22px; left: 16px; z-index: 3;
+  opacity: 0; visibility: hidden; transform: translateX(-8px);
+  transition: opacity 120ms var(--ease), transform 200ms var(--ease), visibility 0s 120ms;
+}
+/* and the sheet keeps clear of it when the panel is tight */
+.pbv.is-idx-hidden .pbv-scroll { padding-left: 62px; padding-right: 62px; }
+.pbv.is-idx-hidden .pbv-show-idx {
+  opacity: 1; visibility: visible; transform: none;
+  transition: opacity 220ms var(--ease) 180ms, transform 340ms var(--pb-open) 140ms, visibility 0s;
+}
+@media (prefers-reduced-motion: reduce) {
+  .pbv, .pbv-idx, .pbv-show-idx, .pbv.is-idx-hidden .pbv-idx, .pbv.is-idx-hidden .pbv-show-idx { transition: none; }
+}
+.pbv-sheet {
+  /* a 640px measure for the text, plus the sheet's own margins */
+  max-width: 754px; margin: 0 auto;
+  background: var(--surface);
+  border: 1px solid var(--line); border-radius: 14px;
+  box-shadow: 0 1px 2px rgba(20,20,19,.03), 0 12px 32px -24px rgba(20,20,19,.18);
+}
+.pbv-bar {
+  position: sticky; top: -22px; z-index: 2;
+  display: flex; align-items: center; gap: 8px;
+  /* slim, and its tools end where the text below ends */
+  height: 44px; padding: 0 48px 0 56px;
+  background: rgba(255,255,255,.95); backdrop-filter: blur(6px);
+  border-bottom: 1px solid var(--line-soft); border-radius: 14px 14px 0 0;
+}
+/* once the page is moving under it, the header casts one soft shadow from
+   its own edge — pulled in at the sides, so there is no hard line and no gap */
+.pbv-bar { transition: box-shadow 220ms var(--ease); }
+.pbv-bar.is-stuck { box-shadow: 0 12px 16px -14px rgba(20,20,19,.22); }
+.pbv-bar-t { font-size: 13.5px; font-weight: 550; }
+.pbv-count {
+  /* a hairline around the number, no fill */
+  font-size: 11px; line-height: 16px; color: var(--text-soft); font-variant-numeric: tabular-nums;
+  border: 1px solid var(--line); border-radius: 999px; padding: 0 7px; min-width: 9px; text-align: center;
+}
+/* where you are: the section whose heading has scrolled away, in a slim
+   second bar under the first. It slides down from behind the bar, and goes
+   back the same way. The holder clips it, so it is never seen above its place. */
+/* (taller than the strip, so the strip's own shadow has room below it) */
+.pbv-bar-sub { position: absolute; left: 0; right: 0; top: 100%; height: 52px; margin-top: 1px; overflow: hidden; pointer-events: none; }
+.pbv-bar-ctx {
+  appearance: none; border: 0; cursor: pointer; font: inherit; text-align: left;
+  display: flex; align-items: baseline; gap: 5px; width: 100%; padding: 0 48px 0 56px;
+  font-size: 12px; line-height: 29px; color: var(--text-soft); white-space: nowrap;
+  /* opaque: the page goes under it, and none of it shows through */
+  background: #FCFBF9; box-sizing: border-box; height: 30px;
+  box-shadow: 0 12px 16px -14px rgba(20,20,19,.22);
+  border-bottom: 1px solid var(--line-soft);
+  transform: translateY(-101%); visibility: hidden;
+  transition: transform 260ms var(--pb-open), visibility 0s 260ms, color var(--fast) var(--ease);
+}
+.pbv-bar-ctx.is-on { transform: none; visibility: visible; pointer-events: auto; transition: transform 260ms var(--pb-open), visibility 0s, color var(--fast) var(--ease); }
+.pbv-bar-ctx:hover, .pbv-bar-ctx:focus-visible { color: var(--text); outline: 0; }
+.pbv-bar-ctx-n { flex: none; font-variant-numeric: tabular-nums; }
+.pbv-bar-ctx-t { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.pbv-bar-ctx.is-swap .pbv-bar-ctx-n, .pbv-bar-ctx.is-swap .pbv-bar-ctx-t { animation: pbvCtxIn 260ms var(--pb-open); }
+@keyframes pbvCtxIn { from { opacity: 0; transform: translateY(-6px); } }
+@media (prefers-reduced-motion: reduce) {
+  .pbv-bar-ctx, .pbv-bar-ctx.is-on { transition: none; }
+  .pbv-bar-ctx.is-swap .pbv-bar-ctx-n, .pbv-bar-ctx.is-swap .pbv-bar-ctx-t { animation: none; }
+}
+@media (max-width: 760px) { .pbv-bar-ctx { padding-left: 22px; padding-right: 14px; } }
+/* one plus, the search glass's twin; what it adds is chosen from its menu */
+.pbv-add {
+  appearance: none; border: 0; background: none; cursor: pointer; flex: none;
+  width: 30px; height: 30px; display: grid; place-items: center;
+  color: var(--text-soft); border-radius: 7px;
+  transition: background var(--fast) var(--ease), color var(--fast) var(--ease);
+}
+.pbv-add { outline: 0; }
+.pbv-add:hover, .pbv-add:focus-visible, .pbv-add[aria-expanded="true"] { background: var(--tint); color: var(--text); }
+.pbv-add .ico, .pbv-add svg { width: 15px; height: 15px; display: block; }
+.pbv-bar .pbv-find + .pbv-add, .pbv-bar .pbv-add + .pbv-add { margin-left: -4px; }
+
+.pbv-body { padding: 30px 56px 20px; }
+.pbv-title { margin: 0 0 8px; font-family: var(--serif); font-size: 27px; font-weight: 400; letter-spacing: -0.012em; line-height: 1.25; }
+.pbv-desc { margin: 0 0 34px; font-size: 13px; line-height: 1.65; color: var(--text-soft); }
+
+.pbv-cl {
+  /* a clause is a group: on hover its ground comes up as one soft panel,
+     the cards staying white inside it */
+  margin: 0 -14px 2px; padding: 12px 14px 14px;
+  border-radius: 14px;
+  transition: background 200ms var(--ease), height 240ms var(--pb-open), opacity 200ms var(--ease),
+    margin 260ms var(--pb-open), padding 260ms var(--pb-open);
+}
+.pbv-cl:hover, .pbv-cl:focus-within { background: #F8F7F5; }
+.pbv-cl[hidden] { display: none; }
+.pbv-cl.is-leaving { opacity: 0; overflow: hidden; margin-bottom: 0; }
+.pbv-cl.is-new { animation: pbArrive 420ms var(--ease-out) backwards; }
+.pbv-sec { margin-bottom: 38px; transition: height 240ms var(--pb-open), opacity 200ms var(--ease); }
+.pbv-sec[hidden] { display: none; }
+/* the last section ends the sheet: no extra room after it */
+.pbv-sec:last-child, .pbv-sec.is-folded:last-child { margin-bottom: 0; }
+.pbv-sec.is-leaving { opacity: 0; overflow: hidden; margin-bottom: 0; }
+.pbv-sec.is-moved .pbv-sec-head { animation: pbvSecFlush 2.2s var(--ease) 150ms backwards; }
+@keyframes pbvSecFlush { 0%, 35% { background: #F7F1E4; box-shadow: 0 0 0 8px #F7F1E4; } 100% { background: transparent; box-shadow: 0 0 0 8px transparent; } }
+.pbv-sec-head {
+  display: flex; align-items: baseline; gap: 8px;
+  margin: 0 0 8px; padding: 0;
+}
+.pbv-sec-n { flex: none; font-family: var(--serif); font-size: 19px; color: var(--text-faint); font-variant-numeric: tabular-nums; }
+.pbv-sec-t { flex: 0 1 auto; min-width: 0; margin: 0; font-family: var(--serif); font-size: 19px; font-weight: 400; letter-spacing: -0.005em; }
+/* the name is only as wide as its words; everything after it sits at the right edge */
+input.pbv-sec-t { field-sizing: content; width: auto; min-width: 4ch; max-width: 100%; }
+.pbv-sec-t { margin-right: auto; }
+/* the heading's tools sit at the right corner: the chevron last, in line with
+   the clause chevrons below it; a delete and an add-a-clause come up beside
+   it only under the pointer */
+.pbv-sec-head .pbv-icon { align-self: center; }
+.pbv-sec-fold { order: 3; margin: 0 6px 0 0; }
+.pbv-sec-tool { opacity: 0; order: 2; margin: 0 -8px 0 0; }
+.pbv-sec-head:hover .pbv-sec-tool, .pbv-sec-tool:focus-visible { opacity: 1; }
+.pbv-sec-tool svg, .pbv-sec-tool .ico { width: 15px; height: 15px; display: block; }
+.pbv-sec-del:hover { color: var(--pos-walkaway); background: var(--pos-walkaway-bg); }
+.pbv-sec-fold svg { width: 13px; height: 13px; transform: rotate(90deg); transition: transform 240ms var(--pb-open); }
+.pbv-sec.is-folded .pbv-sec-fold svg { transform: none; }
+.pbv.is-sheet-drag .pbv-sec-tool { opacity: 0; }
+/* folding: the body's row closes; clipped only while closed or moving */
+.pbv-sec-wrap { display: grid; grid-template-rows: 1fr; transition: grid-template-rows 280ms var(--pb-open), opacity 200ms var(--ease); }
+.pbv-sec-body { min-height: 0; }
+.pbv-sec.is-folded .pbv-sec-wrap { grid-template-rows: 0fr; opacity: 0; }
+.pbv-sec.is-folded .pbv-sec-body, .pbv-sec.is-folding .pbv-sec-body { overflow: hidden; margin: 0 -14px; padding: 0 14px; }
+.pbv-sec.is-folded { margin-bottom: 8px; }
+/* an open section after folded ones still gets its room */
+.pbv-sec.is-folded + .pbv-sec:not(.is-folded) { margin-top: 30px; }
+.pbv-sec.is-folded .pbv-sec-head { margin-bottom: 0; }
+/* a search, or something being carried, looks inside folded sections too */
+.pbv-cls.is-searching .pbv-sec.is-folded .pbv-sec-wrap,
+.pbv-cls.is-outline .pbv-sec.is-folded .pbv-sec-wrap { grid-template-rows: 1fr; opacity: 1; transition: none; }
+.pbv-cls.is-searching .pbv-sec.is-folded .pbv-sec-body,
+.pbv-cls.is-outline .pbv-sec.is-folded .pbv-sec-body { overflow: visible; }
+.pbv-cls.is-searching .pbv-sec.is-folded .pbv-sec-head { margin-bottom: 8px; }
+.pbv-cls.is-searching .pbv-cl.is-folded .pbv-cl-body { grid-template-rows: 1fr; opacity: 1; transition: none; }
+.pbv-cls.is-searching .pbv-cl.is-folded .pbv-cl-in { overflow: visible; padding-top: 10px; }
+.pbv-cls.is-searching .pbv-cl.is-folded { margin-bottom: 2px; padding-top: 12px; padding-bottom: 14px; }
+.pbv-cls.is-searching .pbv-cl.is-folded .pbv-cl-t { font-weight: 600; }
+/* what a search found: a soft yellow behind the words, wherever they are.
+   Over a field it is a sheet of marks that tints the text beneath it. */
+.pbv-hl {
+  position: absolute; box-sizing: border-box; margin: 0; border: 0;
+  color: transparent; overflow: hidden; pointer-events: none;
+  word-break: normal; overflow-wrap: break-word;
+  mix-blend-mode: multiply;
+  animation: pbvHlIn 180ms var(--ease) backwards;
+}
+.pbv-hl mark {
+  color: transparent; background: #FFE680; border-radius: 3px;
+  box-shadow: 0 0 0 1.5px #FFE680;
+  transition: background 160ms var(--ease), box-shadow 160ms var(--ease);
+}
+/* the match you are on, with Enter */
+.pbv-hl mark.is-cur { background: #FFC83D; box-shadow: 0 0 0 1.5px #FFC83D; }
+@keyframes pbvHlIn { from { opacity: 0; } }
+/* the words a change is being asked about: invisible while the field still
+   shows its own selection, then held in the same blue once the caret has
+   moved to the box above them */
+.pbv-sel { animation: none; }
+.pbv-sel mark, .pbv-sel mark.is-cur { background: transparent; box-shadow: none; }
+.pbv-sel.is-held mark { background: #CFE0FC; box-shadow: 0 0 0 1px #CFE0FC; border-radius: 2px; }
+/* the box: one line, and a round button to send it */
+.pbv-ask-pop { max-width: none; padding: 4px; border-radius: 999px; }
+.pbv-ask-pop .doc-ask { width: 300px; padding: 1px 1px 1px 12px; gap: 6px; }
+.pbv-ask-pop .doc-ask-in { font-size: 12.5px; }
+.pbv-ask-pop .doc-ask-go { width: 24px; height: 24px; }
+.pbv-ask-pop .doc-ask-go svg { width: 12px; height: 12px; }
+::highlight(pbv-find) { background-color: #FFE680; color: inherit; }
+.pbv-cls.is-searching .pbv-sec.is-folded { margin-bottom: 38px; }
+.pbv-cl-head { position: relative; display: flex; align-items: center; gap: 12px; min-height: 26px; margin: 0 0 0 8px; }
+.pbv-cl-n { flex: none; min-width: 22px; font-size: 13px; font-weight: 500; color: var(--text-soft); font-variant-numeric: tabular-nums; }
+.pbv-cl-t { flex: 1; min-width: 0; margin: 0; font-size: 13.5px; font-weight: 600; letter-spacing: 0; }
+.pbv-cl-del { margin-left: auto; margin-right: -8px; opacity: 0; }
+/* the fold: a chevron at the end of the heading, down while the clause is open */
+.pbv-cl-fold { margin-right: 6px; }
+.pbv-cl-fold svg { width: 13px; height: 13px; transform: rotate(90deg); transition: transform 240ms var(--pb-open); }
+.pbv-cl.is-folded .pbv-cl-fold svg { transform: none; }
+.pbv-cl-body {
+  display: grid; grid-template-rows: 1fr;
+  transition: grid-template-rows 260ms var(--pb-open), opacity 200ms var(--ease);
+}
+.pbv-cl-in { min-height: 0; padding-top: 10px; }
+.pbv-cl.is-folded .pbv-cl-body { grid-template-rows: 0fr; opacity: 0; }
+.pbv-cl.is-folded .pbv-cl-in { overflow: hidden; padding-top: 0; }
+/* folded clauses sit close, like lines of a list */
+.pbv-cl.is-folded { margin-bottom: 2px; padding-top: 8px; padding-bottom: 8px; }
+.pbv-cl.is-folded .pbv-cl-t { font-weight: 500; }
+.pbv-cl:hover .pbv-cl-del, .pbv-cl-del:focus-visible { opacity: 1; }
+.pbv-cl-del:hover { color: var(--pos-walkaway); background: var(--pos-walkaway-bg); }
+
+.pbv-cards { display: flex; flex-direction: column; gap: 8px; }
+.pbv-pos {
+  position: relative;
+  /* a shade lighter than the app's hairline: twenty-odd cards on one page */
+  border: 1px solid #EFECE7; border-radius: 10px;
+  background: var(--surface);
+  padding: 14px 16px 16px;
+  transition: border-color var(--fast) var(--ease), box-shadow var(--base) var(--ease), background 1.2s var(--ease);
+}
+.pbv-pos.is-new { animation: pbArrive 360ms var(--ease-out) backwards; }
+/* PBV_CARD_BORDERS = 'hover': at rest a card is just its label and its words;
+   the outlines come up with the clause's panel, under the pointer or while
+   it is being edited. The card keeps its padding, so nothing moves. */
+.pbv.is-quiet-cards .pbv-pos { border-color: transparent; transition: border-color 200ms var(--ease), box-shadow var(--base) var(--ease), background 1.2s var(--ease); }
+.pbv.is-quiet-cards .pbv-cl:hover .pbv-pos, .pbv.is-quiet-cards .pbv-cl:focus-within .pbv-pos { border-color: var(--line); }
+.pbv.is-quiet-cards.is-sheet-drag .pbv-pos { border-color: transparent; }
+.pbv-pos-head { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; min-height: 18px; }
+.pbv-mark { width: 16px; height: 16px; flex: none; display: grid; place-items: center; }
+.pbv-mark svg { width: 16px; height: 16px; display: block; }
+.pbv-pos-l { font-size: 12.5px; color: var(--text-soft); }
+.pbv-pos-del { width: 24px; height: 24px; margin: -4px -6px -4px 2px; opacity: 0; }
+.pbv-pos-del svg { width: 14px; height: 14px; }
+.pbv-pos-del:hover { color: var(--pos-walkaway); background: var(--pos-walkaway-bg); }
+.pbv-pos:hover .pbv-pos-del, .pbv-pos-del:focus-visible { opacity: 1; }
+.pbv-pos-t { margin: 0; font-size: 14px; line-height: 1.6; }
+p.pbv-pos-t.is-empty { color: var(--text-faint); font-style: italic; }
+
+/* a change from the chat lands with a warm flush that fades */
+.pbv-cl.is-changed .pbv-pos { animation: pbvFlush 2.4s var(--ease) 200ms backwards; }
+@keyframes pbvFlush { 0%, 35% { background: #F7F1E4; border-color: #E4D6B6; } 100% { background: var(--surface); } }
+.pbv-cl.is-pinged .pbv-cl-head { animation: pbvPing 900ms var(--ease); }
+@keyframes pbvPing { 0%, 40% { opacity: .45; } 100% { opacity: 1; } }
+
+/* under a clause's cards: plain underlined words, no button around them.
+   There only under the pointer (or the keyboard); their room is kept, so
+   nothing shifts. */
+.pbv-cl-acts {
+  display: flex; align-items: center; gap: 16px;
+  margin: 10px 0 0 12px; min-height: 18px;
+  opacity: 0; transition: opacity var(--fast) var(--ease);
+}
+.pbv-cl:hover .pbv-cl-acts, .pbv-cl:focus-within .pbv-cl-acts { opacity: 1; }
+.pbv.is-sheet-drag .pbv-cl-acts { opacity: 0; }
+.pbv-add-fb {
+  appearance: none; border: 0; background: none; cursor: pointer; padding: 0;
+  font: inherit; font-size: 12px; line-height: 18px; color: var(--text-soft);
+  text-decoration: underline; text-decoration-thickness: 1px; text-underline-offset: 3px;
+  text-decoration-color: var(--line-strong);
+  transition: color var(--fast) var(--ease), text-decoration-color var(--fast) var(--ease);
+}
+.pbv-add-fb:hover, .pbv-add-fb:focus-visible { color: var(--text); text-decoration-color: currentColor; outline: 0; }
+.pbv-none { color: var(--text-soft); font-size: 13.5px; margin: 0 0 0 12px; }
+.pbv-gone { padding: 48px; color: var(--text-soft); }
+.pbv-find { margin-left: auto; }
+/* open, it is still not a box: no border, no fill — only the glass coming
+   up to full ink, the words, and a count that answers as you type */
+.pbv-find.is-open { width: 260px; border-color: transparent; background: none; }
+.pbv-find .pb-find-btn { transition: color var(--base) var(--ease), background var(--fast) var(--ease); }
+.pbv-find.is-open .pb-find-btn { color: var(--text); cursor: text; }
+.pbv-find input { padding-right: 6px; caret-color: var(--text); }
+.pbv-find-ct {
+  flex: none; font-size: 12px; color: var(--text-faint); white-space: nowrap;
+  font-variant-numeric: tabular-nums; padding: 0 2px 0 4px;
+  opacity: 0; transform: translateX(4px);
+  transition: opacity var(--base) var(--ease), transform var(--base) var(--ease);
+}
+.pbv-find-x {
+  appearance: none; border: 0; background: none; cursor: pointer; flex: none;
+  width: 22px; height: 22px; display: grid; place-items: center; border-radius: 6px;
+  color: var(--text-faint); opacity: 0; pointer-events: none;
+  transition: opacity var(--base) var(--ease), color var(--fast) var(--ease), background var(--fast) var(--ease);
+}
+.pbv-find-x svg { width: 11px; height: 11px; display: block; }
+.pbv-find-x:hover { color: var(--text); background: var(--tint); }
+.pbv-find.is-open.has-q .pbv-find-ct { opacity: 1; transform: none; }
+.pbv-find.is-open.has-q .pbv-find-x { opacity: 1; pointer-events: auto; }
+
+
+/* ── reordering on the sheet ───────────────────────────────────
+   A grip in the margin of every heading. Picked up, the sheet folds to an
+   outline so that things are put in order as lines, not as tall cards. */
+.pbv-grip {
+  position: absolute; top: 50%; width: 22px; height: 24px; margin-top: -12px;
+  display: grid; place-items: center start; color: var(--text-faint);
+  opacity: 0; cursor: grab; touch-action: none; user-select: none;
+  transition: opacity var(--fast) var(--ease), color var(--fast) var(--ease);
+}
+.pbv-grip svg { width: 12px; height: 14px; display: block; }
+.pbv-grip:hover { color: var(--text); }
+.pbv-cl-head .pbv-grip { left: -19px; }
+.pbv-sec-head { position: relative; }
+.pbv-sec-head .pbv-grip { left: -22px; }
+.pbv-cl:hover .pbv-cl-head .pbv-grip, .pbv-sec-head:hover .pbv-grip { opacity: 1; }
+.pbv.is-dragging .pbv-cls .pbv-grip { opacity: 0; }
+
+/* the outline: every clause is its heading, and nothing answers the pointer */
+.pbv.is-sheet-drag .pbv-cls { pointer-events: none; }
+.pbv-cls.is-outline .pbv-cl,
+.pbv-cls.is-outline .pbv-cl:hover, .pbv-cls.is-outline .pbv-cl:focus-within {
+  margin-bottom: 2px; padding-top: 8px; padding-bottom: 8px; background: none; transition: none;
+}
+.pbv-cls.is-outline .pbv-cl-body, .pbv-cls.is-sec-outline .pbv-sec-body { display: none; }
+.pbv-cls.is-outline .pbv-cl-fold, .pbv-cls.is-outline .pbv-cl-del { visibility: hidden; }
+.pbv-cls.is-outline .pbv-cl-t { font-weight: 500; }
+.pbv-cls.is-outline .pbv-sec { margin-bottom: 16px; transition: none; }
+.pbv-cls.is-outline .pbv-sec-head { margin-bottom: 6px; }
+/* a section among sections: headings only, a little room around each */
+.pbv-cls.is-sec-outline .pbv-sec { margin: 0 -14px 4px; padding: 8px 14px; border-radius: 12px; transition: none; }
+.pbv-cls.is-sec-outline .pbv-sec-head { margin-bottom: 0; }
+/* the slot it came from, and will go back into */
+.pbv-cls.is-outline .pbv-cl.is-slot, .pbv-cls.is-sec-outline .pbv-sec.is-slot {
+  background: #EFE9DC; box-shadow: inset 0 0 0 1px #E2D8C2;
+}
+.pbv-cl.is-slot > *, .pbv-sec.is-slot > * { visibility: hidden; }
+/* the line in hand */
+.pbv-sheet-ghost {
+  display: flex; align-items: center; gap: 12px; box-sizing: border-box;
+  height: 42px; padding: 0 16px 0 5px; border-radius: 12px;
+  font-size: 13.5px; font-weight: 600;
+  transform: scale(1.012) rotate(-.35deg);
+}
+.pbv-sheet-ghost .pbv-grip { position: static; flex: none; width: 12px; margin: 0 -7px 0 0; opacity: 1; color: var(--text-soft); }
+.pbv-ghost-n { flex: none; min-width: 22px; font-size: 13px; font-weight: 500; color: var(--text-soft); font-variant-numeric: tabular-nums; }
+.pbv-ghost-t { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pbv-sheet-ghost.is-sec { height: 48px; font-family: var(--serif); font-size: 19px; font-weight: 400; }
+.pbv-sheet-ghost.is-sec .pbv-ghost-n { min-width: 0; font-size: 19px; font-weight: 400; color: var(--text-faint); }
+.pbv-ghost-ct { flex: none; font-family: var(--font); font-size: 12px; color: var(--text-faint); }
+/* put down: the sheet opens again, its cards coming back into place */
+.pbv-cls.is-opening .pbv-cl-body { animation: pbvUnfold 360ms var(--ease-out) backwards; }
+@keyframes pbvUnfold { from { opacity: 0; transform: translateY(-8px); } to { opacity: 1; transform: none; } }
+
+/* beside a chat the panel is narrow: the index folds away, the sheet widens */
+@container (max-width: 780px) {
+  .pbv, .pbv.is-idx-hidden { grid-template-columns: 0 minmax(0, 1fr); }
+  .pbv-idx-wrap, .pbv-show-idx, .pbv-resize { display: none !important; }
+  .pbv-scroll, .pbv.is-idx-hidden .pbv-scroll { padding: 14px 14px 80px; }
+  .pbv-bar { padding-left: 22px; padding-right: 14px; top: -14px; }
+  .pbv-body { padding: 24px 22px 32px; }
+}
+
+/* ── Publish, for a playbook ── */
+.pb-pub { width: 300px; padding: 14px 14px 12px; }
+.pb-pub-t { font-size: 14px; font-weight: 600; margin-bottom: 6px; }
+.pb-pub-p { margin: 0 0 14px; font-size: 13px; line-height: 1.5; color: var(--text-soft); }
+.pb-pub-acts { display: flex; justify-content: flex-end; gap: 6px; }
+
+/* the upload row's paperclip is drawn in ink, not the muted grey of plain icons */
+.plusmenu button svg.ic-clip, .pill svg.ic-clip { color: var(--text); }
+/* the search toggles sit in ink with the paperclip, beside the colour logos */
+.pb-create-ask .plusmenu button svg.ic { color: var(--text); }
+
+/* Chevrons wait for the pointer: a section's on its heading, a clause's on the
+   clause, the outline's on its row. Keyboard focus brings them up too. */
+@media (hover: hover) {
+  .pbv-sec-fold, .pbv-cl-fold, .pbv-idx-fold { opacity: 0; transition: opacity 140ms var(--ease), background var(--fast) var(--ease), color var(--fast) var(--ease); }
+  .pbv-sec-head:hover .pbv-sec-fold, .pbv-cl:hover .pbv-cl-fold, .pbv-idx-sec:hover .pbv-idx-fold,
+  .pbv-sec-fold:focus-visible, .pbv-cl-fold:focus-visible, .pbv-idx-fold:focus-visible { opacity: 1; }
+  .pbv.is-sheet-drag .pbv-sec-fold, .pbv.is-sheet-drag .pbv-cl-fold, .pbv.is-dragging .pbv-idx-fold { opacity: 0; }
+}
+
+/* ── Unboxed tables (14 Oct, "Remove the boxiness"). Every list loses its
+   frame and the grey column band; tabs, headings and rows sit on the page
+   with hairlines between rows only, text lined up with the page title.
+   Delete this block to bring the bordered card back. ── */
+.pb-card { border: 0; border-radius: 0; background: transparent; box-shadow: none; overflow: visible; }
+.pb-bar-list { padding: 0; }
+.pb-tabs { padding-left: 0; }
+.pb-thead { background: transparent; padding-top: 4px; }
+.pb-tr { padding: 0 12px; margin: 0 -12px; }
+.pb-row { border-radius: 8px; border-bottom: 0; }
+.pb-row + .pb-row { box-shadow: inset 0 1px 0 var(--line-soft); }
+.pb-row:hover, .pb-row:hover + .pb-row { box-shadow: none; }
+/* "Remove line below Open": the selected tab is said by its ink and weight alone */
+.pb-tab-bar { display: none; }
+/* "Remove the line below Open and Unassigned": the tabs sit straight above the column names, no rule between */
+.pb-bar-list { border-bottom: 0; }
+
+/* ── Table tabs as soft pills, an open search box and a squared filter (14 Oct, "make the tabs in our tables like this").
+   The selected tab sits on a light fill; search is always a field; the filter is a bordered square after it.
+   Delete this block to go back to plain words. ── */
+.pb-bar-list { align-items: center; gap: 8px; padding: 0 0 14px; }
+.pb-tabs { gap: 4px; }
+.pb-tab { height: 34px; padding: 0 12px; border-radius: 8px; align-items: center; }
+.pb-tab:hover { background: #F7F5F2; }
+.pb-tab[aria-selected="true"] { background: var(--bg-sunk); color: var(--text); font-weight: 500; }
+.pb-card .pb-bar-list .pb-find.pb-list-find, .pb-card .pb-bar-list .pb-find.pb-list-find.is-open { order: 2; margin: 0 0 0 auto; width: 280px; height: 36px; border-color: var(--line); background: var(--surface); }
+.pb-bar-list .pb-list-find input { opacity: 1; font-size: 13.5px; }
+.pb-bar-list .pb-list-find:focus-within { border-color: var(--line-strong); }
+.pb-bar-list .pb-list-find .pb-find-btn { width: 34px; height: 34px; color: var(--text-faint); }
+.pb-bar-list .pb-list-find .pb-find-btn:hover { background: none; }
+.pb-bar-list .mx-fwrap { order: 3; margin: 0; }
+.pb-bar-list .mx-fbtn { width: 36px; height: 36px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); }
+.pb-bar-list .mx-fbtn:hover, .pb-bar-list .mx-fbtn[aria-expanded="true"] { border-color: var(--line-strong); background: var(--surface); }
+.pb-bar-list .mx-fbtn-n { top: -5px; right: -5px; }
+/* "The lines should left align with the tab": rules start and end on the content edge, not the hover bleed */
+.pb-row + .pb-row { box-shadow: none; }
+.pb-row + .pb-row::before { content: ''; position: absolute; top: 0; left: 12px; right: 12px; height: 1px; background: var(--line-soft); pointer-events: none; }
+.pb-row:hover::before, .pb-row:hover + .pb-row::before { opacity: 0; }
+.pb-thead { position: relative; border-bottom: 0; }
+.pb-thead::after { content: ''; position: absolute; left: 12px; right: 12px; bottom: 0; height: 1px; background: var(--line); pointer-events: none; }
+
+/* equal spacing between columns: widths measured from content (pbFit in playbooks.js) */
+.pb-card .pb-table.is-measuring .pb-tr { grid-template-columns: var(--pb-fit); column-gap: 0; }
+.pb-card .pb-table.is-measuring .pb-td, .pb-card .pb-table.is-measuring .pb-th { overflow: visible; }
+.pb-card .pb-table.is-fit .pb-tr { grid-template-columns: var(--pb-fit); column-gap: var(--pb-gap); }
+
+/* ── List pages: the title, the filters and the column names stay put while the rows scroll
+   (15 Oct). The page itself scrolls, so the scrollbar sits at the window's right edge ("This scroll
+   should go towards the end of the screen"); the three bands are sticky, stacked by --stk1/--stk2
+   (measured in pbFit). ── */
+.view > .pb.is-list { padding-top: 0; }
+.view > .pb.is-list > .lib-head { position: sticky; top: 0; z-index: 4; margin-bottom: 0; padding-top: 34px; padding-bottom: 22px; background: var(--surface, #FFF); }
+.view > .pb.is-list .pb-card > .pb-bar-list { position: sticky; top: var(--stk1, 0px); z-index: 3; background: var(--surface, #FFF); }
+.view > .pb.is-list .pb-table > .pb-thead { position: sticky; top: var(--stk2, 0px); z-index: 3; background: var(--surface, #FFF); }
+
+/* files given with a message, above its bubble (16 Oct) */
+.msg-files { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 6px; margin-bottom: 6px; width: 100%; max-width: 100%; }
+.msg-file {
+  display: inline-flex; align-items: center; gap: 10px; max-width: calc(50% - 3px); min-width: 0;
+  padding: 8px 14px 8px 10px; border-radius: 12px;
+  border: 1px solid var(--line); background: var(--surface);
+}
+.msg-file img, .msg-file-pdf { width: 22px; height: 22px; flex: none; display: grid; }
+.msg-file-pdf svg { width: 22px; height: 22px; }
+.msg-file-t { display: flex; flex-direction: column; min-width: 0; }
+.msg-file-n { font-size: 13px; font-weight: 500; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.msg-file-m { font-size: 11.5px; color: var(--text-faint); }
+
+/* changes proposed from reviews, under the description (17 Oct) */
+.pbv-props { margin: 4px 0 18px; }
+.pbv-props-line { appearance: none; border: 0; background: none; cursor: pointer; display: inline-flex; align-items: center; gap: 8px; padding: 4px 0; font: inherit; font-size: 13px; color: var(--text-soft); transition: color var(--fast) var(--ease); }
+.pbv-props-line:hover, .pbv-props-line.is-open { color: var(--text); }
+.pbv-props-dot { width: 7px; height: 7px; border-radius: 50%; background: #E07F0C; }
+.pbv-props-chev { display: grid; width: 12px; height: 12px; transform: rotate(90deg); transition: transform var(--base) var(--ease); }
+.pbv-props-chev svg { width: 12px; height: 12px; }
+.pbv-props-line.is-open .pbv-props-chev { transform: rotate(-90deg); }
+.pbv-props-list { display: flex; flex-direction: column; gap: 8px; margin-top: 8px; animation: rise 220ms var(--ease-out) backwards; }
+.pbv-prop { padding: 12px 14px; border: 1px solid #ECE9E3; border-radius: 12px; background: var(--surface); }
+.pbv-prop-h { display: flex; align-items: baseline; gap: 8px; font-size: 13.5px; }
+.pbv-prop-h b { font-weight: 600; }
+.pbv-prop-h span { font-size: 12.5px; color: var(--text-faint); }
+.pbv-prop-t { margin: 4px 0 10px; font-size: 14px; line-height: 1.55; color: var(--text); }
+.pbv-prop-f { display: flex; align-items: center; gap: 6px; }
+.pbv-prop-from { font-size: 12px; color: var(--text-faint); }

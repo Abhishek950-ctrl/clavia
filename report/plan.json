@@ -1,0 +1,141 @@
+{
+ "base": "http://localhost:4325/",
+ "w": 1440,
+ "h": 900,
+ "dpr": 2,
+ "clock": "2026-10-17T10:40:00",
+ "steps": [
+  {
+   "go": "#requests/REQ-149"
+  },
+  {
+   "wait": 1500
+  },
+  {
+   "js": "(async()=>{document.getAnimations().forEach(a=>a.finish());return document.querySelector('.jv-prog')?.textContent})()"
+  },
+  {
+   "shot": "shots/01-overview.png"
+  },
+  {
+   "js": "(async()=>{document.querySelector('.jv-ctx').click();await new Promise(r=>setTimeout(r,400));document.getAnimations().forEach(a=>a.finish());return 1})()"
+  },
+  {
+   "shot": "shots/02-setup.png"
+  },
+  {
+   "js": "(async()=>{[...document.querySelector('.jv-setup').querySelectorAll('button')].find(b=>b.textContent==='Cancel').click();await new Promise(r=>setTimeout(r,150));document.querySelector('#jv-pi-9 .jv-row2').click();await new Promise(r=>setTimeout(r,350));const l=document.querySelector('.jv-plist');l.scrollTop=document.querySelector('#jv-pi-9').offsetTop-l.offsetTop-4;document.getAnimations().forEach(a=>a.finish());return 1})()"
+  },
+  {
+   "shot": "shots/03-card-top.png"
+  },
+  {
+   "js": "(async()=>{const l=document.querySelector('.jv-plist');l.scrollTop+=430;document.getAnimations().forEach(a=>a.finish());return 1})()"
+  },
+  {
+   "shot": "shots/04-card-foot.png"
+  },
+  {
+   "js": "(async()=>{[...document.querySelectorAll('#jv-pi-9 button')].find(b=>b.textContent==='Ask Grace').click();await new Promise(r=>setTimeout(r,300));const b=document.querySelector('.jv-sobox');const l=document.querySelector('.jv-plist');l.scrollTop=b.getBoundingClientRect().top-l.getBoundingClientRect().top+l.scrollTop-230;document.getAnimations().forEach(a=>a.finish());return 1})()"
+  },
+  {
+   "shot": "shots/05-signoff.png"
+  },
+  {
+   "js": "(async()=>{[...document.querySelectorAll('.jv-sobox button')].find(b=>b.textContent==='Send for sign-off').click();await new Promise(r=>setTimeout(r,6600));[...document.querySelectorAll('#jv-pi-9 .jv-their button')].find(b=>b.textContent==='Reply').click();await new Promise(r=>setTimeout(r,300));const l=document.querySelector('.jv-plist');l.scrollTop=document.querySelector('#jv-pi-9').offsetTop-l.offsetTop+60;document.getAnimations().forEach(a=>a.finish());return document.querySelector('#jv-pi-9 .jv-soline')?.textContent})()"
+  },
+  {
+   "shot": "shots/06-approved-reply.png"
+  },
+  {
+   "js": "(async()=>{document.querySelector('#jv-pi-9 .jv-cchip').click();await new Promise(r=>setTimeout(r,100));[...document.querySelectorAll('#jv-pi-9 .jv-their button')].find(b=>b.textContent==='Save').click();await new Promise(r=>setTimeout(r,200));document.querySelector('#jv-pi-9 .jv-row2').click();await new Promise(r=>setTimeout(r,200));const l=document.querySelector('.jv-plist');l.scrollTop=0;[...document.querySelectorAll('.jv-dl-act')][0].click();await new Promise(r=>setTimeout(r,350));document.getAnimations().forEach(a=>a.finish());return 1})()"
+  },
+  {
+   "shot": "shots/07-exposure.png"
+  },
+  {
+   "js": "(async()=>{[...document.querySelectorAll('.jv-dl-act')][1].click();await new Promise(r=>setTimeout(r,350));document.getAnimations().forEach(a=>a.finish());return 1})()"
+  },
+  {
+   "shot": "shots/08-close.png"
+  },
+  {
+   "js": "(async()=>{[...document.querySelectorAll('.jv-dl-act')][1].click();await new Promise(r=>setTimeout(r,200));document.querySelector('#jv-pi-7 .jv-row2').click();await new Promise(r=>setTimeout(r,300));const l=document.querySelector('.jv-plist');l.scrollTop=document.querySelector('#jv-pi-7').offsetTop-l.offsetTop-4;document.getAnimations().forEach(a=>a.finish());return 1})()"
+  },
+  {
+   "shot": "shots/09-weak.png"
+  },
+  {
+   "js": "(async()=>{[...document.querySelectorAll('#jv-pi-7 .jv-rm-link')].find(b=>b.textContent==='View in playbook').click();await new Promise(r=>setTimeout(r,700));document.getAnimations().forEach(a=>a.finish());return 1})()"
+  },
+  {
+   "shot": "shots/10-rule-sheet.png"
+  },
+  {
+   "key": "Escape"
+  },
+  {
+   "wait": 500
+  },
+  {
+   "js": "(async()=>{[...document.querySelectorAll('#jv-pi-7 .jv-rm-link')].find(b=>b.textContent==='See deals').click();await new Promise(r=>setTimeout(r,700));document.getAnimations().forEach(a=>a.finish());return 1})()"
+  },
+  {
+   "shot": "shots/11-deals.png"
+  },
+  {
+   "key": "Escape"
+  },
+  {
+   "wait": 500
+  },
+  {
+   "js": "(async()=>{[...document.querySelectorAll('.jv-ptabs button')].find(b=>/Ask/.test(b.textContent)).click();await new Promise(r=>setTimeout(r,300));const t=document.querySelector('.jv-askbox textarea');t.value='/';t.dispatchEvent(new Event('input'));await new Promise(r=>setTimeout(r,300));document.getAnimations().forEach(a=>a.finish());return 1})()"
+  },
+  {
+   "shot": "shots/12-slash.png"
+  },
+  {
+   "js": "(async()=>{[...document.querySelectorAll('.jv-slash-it')].find(x=>x.textContent.startsWith('Check defined')).dispatchEvent(new MouseEvent('mousedown',{bubbles:true}));await new Promise(r=>setTimeout(r,1500));document.getAnimations().forEach(a=>a.finish());return 1})()"
+  },
+  {
+   "shot": "shots/13-terms.png"
+  },
+  {
+   "js": "(async()=>{const t=document.querySelector('.jv-askbox textarea');t.value='/';t.dispatchEvent(new Event('input'));await new Promise(r=>setTimeout(r,200));[...document.querySelectorAll('.jv-slash-it')].find(x=>x.textContent.startsWith('Summarise')).dispatchEvent(new MouseEvent('mousedown',{bubbles:true}));await new Promise(r=>setTimeout(r,1500));document.getAnimations().forEach(a=>a.finish());return 1})()"
+  },
+  {
+   "shot": "shots/14-changes.png"
+  },
+  {
+   "js": "(async()=>{[...document.querySelectorAll('.jv-ptabs button')].find(b=>/Playbook/.test(b.textContent)).click();await new Promise(r=>setTimeout(r,300));[...document.querySelectorAll('.jv-dl-act')][0].click();await new Promise(r=>setTimeout(r,250));[...document.querySelectorAll('.jv-pkg button')].find(b=>b.textContent==='Apply package').click();await new Promise(r=>setTimeout(r,250));[...document.querySelectorAll('.jv-dl-act')][0].click();await new Promise(r=>setTimeout(r,200));document.querySelector('.jv-pmore').click();await new Promise(r=>setTimeout(r,300));document.getAnimations().forEach(a=>a.finish());return 1})()"
+  },
+  {
+   "shot": "shots/15-finish.png"
+  },
+  {
+   "js": "(async()=>{[...document.querySelectorAll('.menu .menu-item')].find(x=>/Summary/.test(x.textContent)).click();await new Promise(r=>setTimeout(r,500));document.getAnimations().forEach(a=>a.finish());return document.querySelector('.jv-sum-body')?.innerText})()"
+  },
+  {
+   "shot": "shots/16-summary.png"
+  },
+  {
+   "key": "Escape"
+  },
+  {
+   "wait": 300
+  },
+  {
+   "js": "(async()=>{document.querySelector('#jv-pi-3 .jv-row2').click();await new Promise(r=>setTimeout(r,300));document.querySelector('#jv-pi-3 .jv-pospick').click();await new Promise(r=>setTimeout(r,200));[...document.querySelectorAll('.menu .menu-item')].find(x=>/Accept their/.test(x.textContent)).click();await new Promise(r=>setTimeout(r,250));[...document.querySelectorAll('#jv-pi-3 button')].find(b=>b.textContent==='Accept').click();await new Promise(r=>setTimeout(r,250));const l=document.querySelector('.jv-plist');l.scrollTop=document.querySelector('#jv-pi-3').offsetTop-l.offsetTop-4;document.getAnimations().forEach(a=>a.finish());return document.querySelector('#jv-pi-3 .jv-acard-prop')?.textContent})()"
+  },
+  {
+   "shot": "shots/17-override.png"
+  },
+  {
+   "js": "(async()=>{document.querySelector('#jv-pi-3 .jv-acard-prop').click();await new Promise(r=>setTimeout(r,300));location.hash='playbooks/saas';await new Promise(r=>setTimeout(r,1500));document.querySelector('.pbv-props-line')?.click();await new Promise(r=>setTimeout(r,400));document.getAnimations().forEach(a=>a.finish());return document.querySelector('.pbv-prop')?.innerText})()"
+  },
+  {
+   "shot": "shots/18-proposal.png"
+  }
+ ]
+}

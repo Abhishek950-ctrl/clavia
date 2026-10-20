@@ -1,0 +1,1238 @@
+<title>AI Meetings</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@300..700&family=Spectral:ital,wght@0,300;0,400;0,500&display=swap">
+<style>
+  :root{
+    --stage:#FFFFFF; --ink:#1A1A18; --mute:#6B6862; --dim:#9A968E;
+    --hair:#E8E4DF; --rule:#1A1A18;
+    --p-bg:#FFFFFF; --p-tint:#F4F2EF; --p-line:#E8E4DF; --p-line-soft:#F0EDE7;
+    --p-strong:#D8D3CC; --p-ink:#1A1A18; --p-soft:#6B6862; --p-faint:#9A968E;
+    --p-green:#12A45C; --p-red:#C1443C;
+    --sans:"Geist",ui-sans-serif,-apple-system,"Segoe UI",system-ui,sans-serif;
+    --serif:"Spectral",ui-serif,Georgia,"Times New Roman",serif;
+  }
+  *{box-sizing:border-box}
+  html,body{height:100%}
+  body{margin:0; background:var(--stage); color:var(--ink);
+    font-family:var(--sans); -webkit-font-smoothing:antialiased; overflow:hidden}
+  .deck{position:relative; height:100vh; width:100%; overflow:hidden}
+  .slide{position:absolute; inset:0; display:none;
+    padding:clamp(30px,4.5vw,80px) 0 clamp(30px,4.5vw,80px) clamp(28px,6vw,110px)}
+  .slide[data-on="true"]{display:grid; animation:in .5s cubic-bezier(.2,.7,.2,1) both}
+  @keyframes in{from{opacity:0; transform:translateY(10px)}}
+  @media (prefers-reduced-motion:reduce){.slide[data-on="true"]{animation:none}}
+
+  /* ── title ── */
+  .title{padding-right:clamp(28px,6vw,110px);
+    grid-template-rows:auto auto; align-content:center; gap:clamp(26px,5vh,64px)}
+  .title h1{font-family:var(--serif); font-weight:300; letter-spacing:-.02em;
+    font-size:clamp(40px,6vw,88px); line-height:1; margin:0; text-wrap:balance}
+  .title .lede{margin:20px 0 0; max-width:36ch;
+    font-size:clamp(15px,1.5vw,19px); line-height:1.5; color:var(--mute)}
+  /* One field, divided. Each cell is lifted a shade off the black so the
+     grid reads as glass rather than as ten holes cut in it. */
+  .heroes{display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:1px;
+    background:var(--hair); border:1px solid var(--hair); border-radius:16px; overflow:hidden}
+  .cell{
+    background:var(--stage);
+    min-height:clamp(92px,11vh,124px);
+    padding:clamp(15px,1.7vw,22px) clamp(13px,1.5vw,20px) clamp(16px,1.8vw,22px);
+    display:flex; flex-direction:column; justify-content:space-between;
+    font-size:clamp(12.5px,1.05vw,15px); line-height:1.3; letter-spacing:-.008em;
+    color:var(--ink);
+  }
+  .heroes .cell:last-child{grid-column:span 2}
+  .mk{flex:none; align-self:flex-start; width:clamp(30px,2.5vw,34px); height:clamp(30px,2.5vw,34px); border-radius:9px;
+    display:grid; place-items:center;
+    background:#F4F2EF; border:1px solid #EDE9E2}
+  .mk svg{width:17px; height:17px; color:#6B6862; display:block}
+  .cell i{font-style:normal; color:var(--dim)}
+
+
+  /* ── the wall: every construct as a crop of the real thing ──
+     Each tile is the app at full size, scaled down inside its own frame,
+     so what you are looking at is the interface rather than a drawing of
+     it. One glance says what the eleven things are and how they look. */
+  .gridslide{grid-template-rows:auto 1fr; align-content:start; gap:clamp(16px,2.6vh,30px)}
+  .gridslide h2{font-size:clamp(26px,3vw,44px)}
+  /* the name is the thing being shown; the crop underneath is evidence.
+     So the name is set large and dark, the frames are held back to a
+     wide, quiet band, and the rows are given room to breathe. */
+  .tiles{display:grid; grid-template-columns:repeat(4,minmax(0,1fr));
+    column-gap:clamp(18px,2.2vw,36px); row-gap:clamp(20px,2.8vw,40px); align-content:start}
+  .tile{margin:0; min-width:0; display:flex; flex-direction:column}
+  .shot{container-type:inline-size; position:relative; aspect-ratio:2/1;
+    overflow:hidden; border-radius:10px; background:var(--p-bg);
+    border:1px solid var(--hair);
+    box-shadow:0 10px 22px -18px rgba(26,26,24,.35)}
+  .mini{position:absolute; top:0; left:0; width:1240px; height:620px;
+    transform-origin:0 0; transform:scale(calc(100cqi / 1240));
+    background:var(--p-bg); color:var(--p-ink); font-size:15px; line-height:1.55}
+  .tile figcaption{margin:0 0 clamp(9px,1.1vw,14px); color:var(--ink);
+    font-size:clamp(15px,1.55vw,21px); font-weight:550; letter-spacing:-.016em;
+    line-height:1.1; display:flex; align-items:center; gap:clamp(8px,.9vw,12px)}
+  .tmk{flex:none; width:clamp(17px,1.5vw,21px); height:clamp(17px,1.5vw,21px);
+    color:var(--mute)}
+  .tmk svg{display:block; width:100%; height:100%}
+
+  /* ── context: three plain statements of what the work is ── */
+  .ctx, .journey{padding-right:clamp(28px,6vw,110px); align-content:center;
+    grid-template-rows:auto auto; gap:clamp(28px,5vh,60px)}
+  .ctx h2, .journey h2{font-family:var(--serif); font-weight:300; letter-spacing:-.018em;
+    font-size:clamp(30px,4vw,56px); line-height:1.1; margin:0; max-width:22ch;
+    text-wrap:balance}
+  .three{display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:1px;
+    background:var(--hair); border:1px solid var(--hair); border-radius:16px; overflow:hidden}
+  .three > div{background:var(--stage);
+    padding:clamp(20px,2.4vw,30px) clamp(18px,2vw,26px) clamp(22px,2.6vw,32px)}
+  .three em{font-style:normal; display:block; font-size:11.5px; letter-spacing:.14em;
+    text-transform:uppercase; color:var(--dim); margin-bottom:clamp(14px,1.8vw,20px)}
+  .three p{margin:0; font-size:clamp(13.5px,1.2vw,16px); line-height:1.55; color:var(--ink)}
+  .three ul{margin:0; padding-left:17px; display:flex; flex-direction:column;
+    gap:clamp(8px,1vw,11px)}
+  .three li{font-size:clamp(13.5px,1.2vw,16px); line-height:1.45; color:var(--ink)}
+  .three li::marker{color:var(--dim)}
+
+
+  /* ── the journey as one table ──
+     One numbered line per thing that happens, and the number carries
+     across the row: what it costs you today, what it is with the
+     product, what that is worth, and the feature that does it. */
+  .table{grid-template-rows:auto auto; align-content:center; gap:clamp(18px,3vh,34px)}
+  .matrix{display:grid;
+    grid-template-columns:auto repeat(4,minmax(0,1fr));
+    column-gap:clamp(14px,1.8vw,32px)}
+  .mhead{font-size:10.5px; letter-spacing:.13em; text-transform:uppercase; color:var(--dim);
+    padding-bottom:clamp(9px,1.1vw,13px); border-bottom:1px solid var(--rule)}
+  .mstep{font-family:var(--serif); font-weight:400; font-size:clamp(18px,1.9vw,26px);
+    letter-spacing:-.01em; color:var(--ink);
+    padding:clamp(16px,2vw,26px) clamp(12px,1.6vw,24px) 0 0}
+  /* no rule between the rows: the stage is the only division the eye
+     needs, and eleven hairlines made a ledger of it */
+  .mcell{font-size:clamp(11.5px,1vw,13.8px); line-height:1.5; color:var(--ink);
+    padding:clamp(9px,1.1vw,14px) clamp(10px,1.2vw,20px) clamp(9px,1.1vw,14px) 0;
+    min-height:clamp(48px,5.4vh,70px); display:flex; align-items:center}
+  .mstep.is-top, .mcell.is-top{border-top:1px solid var(--hair);
+    margin-top:clamp(10px,1.4vw,20px)}
+  .mstep.is-top{margin-top:clamp(10px,1.4vw,20px)}
+  .mcell.was{color:var(--mute)}
+  .mcell.feat-list{color:var(--ink); gap:clamp(7px,.8vw,11px)}
+  .fmk{flex:none; width:clamp(14px,1.2vw,17px); height:clamp(14px,1.2vw,17px);
+    color:var(--dim)}
+  .fmk svg{display:block; width:100%; height:100%}
+
+  /* ── the journey: three stages, and what lands in each ── */
+  .stages{display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:clamp(16px,2vw,30px)}
+  .stage{border-top:1px solid var(--rule); padding-top:clamp(15px,1.9vw,22px)}
+  .when{display:flex; align-items:baseline; gap:10px}
+  .when b{font-family:var(--serif); font-weight:400; font-size:clamp(19px,2vw,26px);
+    letter-spacing:-.01em; color:var(--ink)}
+  .when i{font-style:normal; font-size:11px; letter-spacing:.12em; text-transform:uppercase;
+    color:var(--dim)}
+  .chips{display:flex; flex-wrap:wrap; gap:7px; margin-top:clamp(13px,1.6vw,18px)}
+  .chips span{border:1px solid var(--hair); border-radius:999px; padding:6px 12px;
+    font-size:clamp(11.5px,1vw,13.5px); color:var(--ink); background:#FAF9F7}
+  .stage .note{margin:clamp(13px,1.6vw,18px) 0 0; font-size:13.4px; line-height:1.5;
+    color:var(--mute)}
+  .pairs{margin:clamp(13px,1.6vw,18px) 0 0; display:flex; flex-direction:column; gap:0}
+  .pairs > div{padding:clamp(9px,1.1vw,13px) 0; border-top:1px solid var(--hair)}
+  .pairs > div:first-child{border-top:0; padding-top:0}
+  .pairs dt{font-size:clamp(12.5px,1.05vw,14.5px); color:var(--ink)}
+  .pairs dd{margin:4px 0 0; font-size:clamp(12px,1vw,13.6px); line-height:1.45;
+    color:var(--mute)}
+  .stage .full{margin:14px 0 0; font-size:clamp(13px,1.15vw,15px); line-height:1.6;
+    color:var(--ink)}
+
+  /* ── a divider, for stepping out of the deck ── */
+  .divider{place-content:center; place-items:center; padding-right:clamp(28px,6vw,110px);
+    text-align:center}
+  .divider h2{font-family:var(--serif); font-weight:300; letter-spacing:-.02em;
+    font-size:clamp(42px,7vw,104px); line-height:1.02; margin:0}
+  .divider p{margin:20px 0 0; font-size:12px; color:var(--dim);
+    letter-spacing:.16em; text-transform:uppercase}
+
+  /* ── feature slides: words left, the interface zoomed in on the right ── */
+  .feat{grid-template-columns:minmax(0,30%) minmax(0,1fr);
+    gap:clamp(24px,4vw,64px); align-items:center}
+  .say{max-width:32ch}
+  .eyebrow{font-size:11.5px; letter-spacing:.14em; text-transform:uppercase; color:var(--dim)}
+  .feat h2{font-family:var(--serif); font-weight:300; letter-spacing:-.018em;
+    font-size:clamp(34px,4.3vw,60px); line-height:1.04; margin:16px 0 0; text-wrap:balance}
+
+  /* the screen: a crop of the running app, running off the right edge */
+  .screen{
+    position:relative; height:min(74vh,720px); overflow:hidden;
+    background:var(--p-bg); color:var(--p-ink);
+    border:1px solid var(--hair); border-right:0;
+    border-radius:18px 0 0 18px;
+    box-shadow:0 34px 70px -36px rgba(26,26,24,.34);
+    font-size:15px; line-height:1.55;
+  }
+  .screen::after{content:""; position:absolute; inset:auto 0 0 0; height:110px;
+    background:linear-gradient(180deg,rgba(255,255,255,0),#fff)}
+  .screen.plain::after{display:none}
+  /* Some slides are about a thing near the right edge — a popover, a
+     short list. Cropping those cuts off the point, so they get a screen
+     that ends inside the slide instead of running past it, and takes
+     its height from what is on it. */
+  .feat.whole{padding-right:clamp(28px,6vw,110px)}
+  .screen.whole{border-right:1px solid var(--hair); border-radius:18px;
+    height:auto; max-height:min(74vh,720px)}
+  .screen.whole::after{display:none}
+  .pane{display:grid; grid-template-columns:1fr 400px; height:100%}
+  .pane > .side{border-left:1px solid var(--p-line); overflow:hidden; position:relative}
+  .page{padding:30px 34px; overflow:hidden}
+
+  .top{display:flex; align-items:center; justify-content:space-between; margin-bottom:22px}
+  .back{font-size:14px; color:var(--p-soft)}
+  .chip{display:inline-flex; align-items:center; gap:7px; height:32px; padding:0 14px;
+    border:1px solid var(--p-line); border-radius:10px; font-size:13.5px; font-weight:550;
+    box-shadow:0 1px 1.5px rgba(26,26,24,.035)}
+  h3.t{font-family:var(--serif); font-weight:400; font-size:32px; letter-spacing:-.018em;
+    margin:0; line-height:1.15}
+  .meta{margin-top:8px; font-size:14px; color:var(--p-soft)}
+  .tabs{display:flex; gap:24px; margin-top:26px; padding-bottom:11px;
+    border-bottom:1px solid var(--p-line); font-size:15px; color:var(--p-soft)}
+  .tabs b{font-weight:400; color:var(--p-ink); position:relative}
+  .tabs b::after{content:""; position:absolute; left:0; right:0; bottom:-12px; height:1.5px;
+    background:var(--p-ink)}
+  .strip{display:flex; align-items:center; justify-content:space-between;
+    background:var(--p-tint); border-radius:11px; padding:11px 14px;
+    font-size:13.5px; color:var(--p-soft); margin-top:22px}
+  .body{margin-top:2px}
+  .body .par{margin:22px 0 0; font-size:15.5px; line-height:1.62}
+  .body h4{margin:26px 0 10px; font-size:15.5px; font-weight:600}
+  .body ul{margin:0; padding-left:19px; display:flex; flex-direction:column; gap:9px}
+  .body li{font-size:15.5px; line-height:1.62}
+  .nm{font-weight:600; text-decoration:underline dotted;
+    text-decoration-color:var(--p-faint); text-underline-offset:3px}
+  .quiet{font-size:13.5px; color:var(--p-faint)}
+  .pill{display:inline-flex; align-items:center; gap:7px; height:31px; padding:0 13px;
+    border:1px solid var(--p-line); border-radius:999px; font-size:13.4px; font-weight:550}
+  .foot{display:flex; align-items:center; justify-content:space-between; margin-top:14px}
+
+  .rows{display:flex; flex-direction:column; margin-top:6px}
+  .row{display:flex; gap:13px; align-items:flex-start; padding:13px 0}
+  .row + .row{border-top:1px solid var(--p-line-soft)}
+  .row .ic{flex:none; width:24px; height:24px; border-radius:6px; display:grid;
+    place-items:center; font-size:11px; font-weight:700; color:#fff}
+  .row .n{font-size:15px; font-weight:550}
+  .row .w{font-size:13.4px; color:var(--p-faint); margin-top:3px}
+
+  .ph{display:flex; align-items:center; gap:14px; padding:12px 14px 12px 18px;
+    border-bottom:1px solid var(--p-line-soft); font-size:14px}
+  .ph .deckt{display:flex; gap:20px; color:var(--p-soft)}
+  .ph .deckt b{font-weight:400; color:var(--p-ink); position:relative}
+  .ph .deckt b::after{content:""; position:absolute; left:0; right:0; bottom:-13px;
+    height:1.5px; background:var(--p-ink)}
+  .ph .sp{margin-left:auto; display:flex; align-items:center; gap:14px; color:var(--p-faint)}
+  .ph .sp svg{width:17px; height:17px; display:block}
+
+  .pbody{padding:22px 22px 0}
+  .pname{font-family:var(--serif); font-weight:400; font-size:24px; letter-spacing:-.015em}
+  .tag{margin-left:9px; padding:3px 8px; border-radius:999px; background:var(--p-tint);
+    color:var(--p-soft); font-size:10.5px; font-weight:650; letter-spacing:.04em;
+    text-transform:uppercase; vertical-align:3px}
+  .prole{margin-top:5px; font-size:14px; color:var(--p-soft)}
+  .lines{margin-top:20px; display:flex; flex-direction:column}
+  .ln{display:grid; grid-template-columns:88px 1fr; gap:12px; padding:10px 0;
+    border-bottom:1px solid var(--p-line-soft); font-size:14px}
+  .ln span:first-child{color:var(--p-faint)}
+  .ln u{text-decoration:underline dotted; text-decoration-color:var(--p-faint);
+    text-underline-offset:3px; font-weight:600}
+  .askbox{position:absolute; left:0; right:0; bottom:0; padding:14px 18px 18px;
+    background:linear-gradient(180deg,rgba(255,255,255,0),#fff 45%); z-index:1}
+  .askbox div{height:46px; border:1px solid var(--p-line); border-radius:999px;
+    display:flex; align-items:center; padding:0 16px; gap:10px;
+    color:var(--p-faint); font-size:14px}
+
+  .cue{display:flex; gap:12px; padding:15px 0}
+  .cue + .cue{border-top:1px solid var(--p-line-soft)}
+  .dot{flex:none; width:26px; height:26px; border-radius:50%; display:grid; place-items:center;
+    color:#fff; font-size:14px; font-weight:700; line-height:1}
+  .cue .q{font-family:var(--serif); font-size:17px; line-height:1.35; margin-top:3px}
+  .cue .who{display:flex; justify-content:space-between; font-size:12.8px; color:var(--p-faint)}
+  .ans{margin-top:10px; padding-left:12px; border-left:2px solid var(--p-line);
+    font-size:14.6px; line-height:1.5}
+  .sect{font-size:11px; letter-spacing:.07em; text-transform:uppercase;
+    color:var(--p-faint); margin:10px 0 6px}
+
+  .line{display:grid; grid-template-columns:150px 1fr; gap:16px; padding:12px 0}
+  .line + .line{border-top:1px solid var(--p-line-soft)}
+  .spk{font-size:14px; font-weight:600}
+  .tm{font-size:12.4px; color:var(--p-faint); font-variant-numeric:tabular-nums}
+  .said{font-size:15px; line-height:1.55}
+
+  .todo{display:flex; flex-direction:column; gap:4px; margin-top:8px}
+  .todo div{display:flex; align-items:flex-start; gap:11px; padding:5px 0; font-size:15.5px}
+  .box{flex:none; width:16px; height:16px; margin-top:5px; border-radius:5px;
+    border:1.5px solid var(--p-strong)}
+  .box.on{background:var(--p-ink); border-color:var(--p-ink); color:#fff;
+    display:grid; place-items:center; font-size:10px}
+  .struck{color:var(--p-faint); text-decoration:line-through;
+    text-decoration-color:var(--p-strong)}
+
+  .tsplit{display:grid; grid-template-columns:340px minmax(0,1fr);
+    gap:clamp(20px,3vw,46px); align-items:start}
+  .tprev{padding-top:14px}
+  .tprev .body h4:first-of-type{margin-top:10px}
+  .ghost{color:var(--p-faint)}
+  /* ── multiplayer: two other people, in the same document ──
+     A caret in their colour with their name on it, the run of text they
+     have selected tinted the same, and the faces in the header from the
+     same palette, so it is obvious who is where. */
+  .faces{display:flex}
+  .face{width:28px; height:28px; border-radius:50%; display:grid; place-items:center;
+    font-size:10.5px; font-weight:700; color:#fff; box-shadow:0 0 0 2px #fff}
+  .faces .face + .face{margin-left:-9px}
+  .cur{position:relative; display:inline-block; width:2px; height:1.15em;
+    vertical-align:-.22em; margin:0 1px; border-radius:1px}
+  .cur b{position:absolute; left:-1px; top:-1.45em; white-space:nowrap;
+    font-size:10.5px; font-weight:650; letter-spacing:.01em; color:#fff;
+    padding:2px 7px 3px; border-radius:5px 5px 5px 0}
+  .cur-b, .cur-b b{background:#2F6FEB}
+  .cur-o, .cur-o b{background:#C4783A}
+  .sel{border-radius:3px; box-decoration-break:clone;
+    -webkit-box-decoration-break:clone; padding:1px 2px}
+  .sel-b{background:rgba(47,111,235,.16)}
+  .sel-o{background:rgba(196,120,58,.18)}
+  .cnote{display:flex; gap:11px; align-items:flex-start; margin-top:26px; width:420px;
+    background:#fff; border:1px solid var(--p-line); border-radius:13px; padding:12px 14px;
+    box-shadow:0 2px 4px rgba(26,26,24,.04), 0 20px 44px -22px rgba(26,26,24,.5)}
+  .cn-n{font-size:13px; font-weight:600}
+  .cn-n span{font-weight:400; color:var(--p-faint); margin-left:6px}
+  .cn-t{font-size:14px; margin-top:3px}
+  /* an answer that says where it has been: the places it looked, then
+     the two documents the sentence actually came out of */
+  .srch{display:flex; align-items:center; flex-wrap:wrap; gap:8px; margin-top:16px}
+  .src{display:inline-flex; align-items:center; gap:7px; height:28px; padding:0 11px;
+    border:1px solid var(--p-line); border-radius:999px; font-size:13px; color:var(--p-soft)}
+  .src i{width:9px; height:9px; border-radius:2.5px; display:block}
+  .srch-n{font-size:12.6px; color:var(--p-faint)}
+  .cite{margin-top:18px; display:flex; flex-direction:column; gap:9px}
+  .cite div{display:flex; align-items:center; gap:9px; font-size:13.4px; color:var(--p-soft)}
+  .ci{width:19px; height:19px; border-radius:4px; display:grid; place-items:center;
+    font-size:9.5px; font-weight:700; color:#fff}
+  .was-v{color:var(--p-faint); text-decoration:line-through;
+    text-decoration-color:var(--p-strong); margin-right:9px}
+  /* the ask, and the looking: the question as it was typed, then the
+     places being read one by one, ticked off as they come back */
+  .askq{border:1px solid var(--p-line); border-radius:12px; padding:13px 16px;
+    font-size:15.5px; box-shadow:0 1px 2px rgba(26,26,24,.03)}
+  .askq-t::after{content:""; display:inline-block; width:1.5px; height:1.05em;
+    background:var(--p-ink); vertical-align:-.18em; margin-left:2px}
+  .hits{display:flex; flex-direction:column; margin-top:4px}
+  .hit{display:flex; align-items:center; gap:11px; padding:10px 0;
+    border-bottom:1px solid var(--p-line-soft); font-size:14px}
+  .hit-n{flex:none; max-width:44%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
+  .hit-s{flex:1; color:var(--p-faint); font-size:13px}
+  .hit-k{flex:none; font-size:13px}
+  .hit.is-live .hit-n{color:var(--p-soft)}
+  .sp{display:block; width:12px; height:12px; border-radius:50%;
+    border:1.6px solid var(--p-line); border-top-color:var(--p-soft);
+    animation:sp .8s linear infinite}
+  @keyframes sp{to{transform:rotate(360deg)}}
+  /* every system it can reach, said once, as a field of marks */
+  .conns{display:flex; flex-wrap:wrap; gap:8px; margin-top:14px}
+  .conn{display:inline-flex; align-items:center; gap:8px; height:31px; padding:0 12px 0 8px;
+    border:1px solid var(--p-line); border-radius:999px; font-size:13.4px; color:var(--p-soft)}
+  .conn i{width:18px; height:18px; border-radius:4px; display:grid; place-items:center;
+    font-size:9.5px; font-weight:700; color:#fff; font-style:normal}
+  .cref{display:inline-flex; align-items:center; height:23px; padding:0 9px; margin:0 3px;
+    border:1px solid var(--p-line); border-radius:999px; font-size:12.4px;
+    color:var(--p-faint); vertical-align:1px}
+  /* the bar the product actually uses, and nothing under it */
+  .askbar{display:flex; align-items:center; gap:10px; width:100%;
+    margin:22px 0 20px; padding:9px 9px 9px 14px;
+    background:var(--p-bg); border:1px solid var(--p-line); border-radius:12px}
+  .askbar-plus{flex:none; width:21px; height:21px; color:var(--p-faint)}
+  .askbar-plus svg, .askbar-go svg{display:block; width:100%; height:100%}
+  .askbar-ph{flex:1; min-width:0; font-size:15px; color:var(--p-faint)}
+  .askbar-go{flex:none; width:32px; height:32px; border-radius:50%; padding:8px;
+    background:var(--p-tint); color:var(--p-faint)}
+  /* every system it reaches, as its own mark, beside the name of the thing */
+  .logos{display:flex; flex-wrap:wrap; gap:clamp(11px,1.2vw,17px);
+    margin-top:clamp(22px,3vh,34px); max-width:30ch}
+  .lg{width:clamp(22px,2vw,28px); height:clamp(22px,2vw,28px); display:block}
+  .lg svg, .lg img{display:block; width:100%; height:100%; object-fit:contain}
+  /* the meetings page as it stands: the day, the bar, and the list */
+  .lp-top{display:flex; align-items:center; gap:20px; margin-bottom:4px}
+  .lp-h{font-family:var(--serif); font-weight:400; font-size:30px; letter-spacing:-.018em}
+  .lp-day{flex:1; display:flex; align-items:center; justify-content:center; gap:9px;
+    font-size:15px; color:var(--p-faint)}
+  .lp-day b{font-weight:600; color:var(--p-ink)}
+  .lp-day i{font-style:normal}
+  .lp-row{display:grid; grid-template-columns:74px 8px 1fr auto; align-items:center;
+    gap:14px; padding:13px 0; border-bottom:1px solid var(--p-line-soft)}
+  .lp-t{display:flex; flex-direction:column; font-variant-numeric:tabular-nums}
+  .lp-t b{font-weight:400; font-size:16px}
+  .lp-t i{font-style:normal; font-size:13px; color:var(--p-faint)}
+  .lp-dot{width:7px; height:7px; border-radius:50%; background:#5B7CC4; display:block}
+  .lp-n{display:block; font-size:16.5px}
+  .lp-w{display:block; font-size:14px; color:var(--p-faint); margin-top:3px}
+  .lp-now{display:inline-flex; align-items:center; height:22px; padding:0 9px; margin-left:9px;
+    border-radius:999px; background:var(--p-green); color:#fff; font-size:12px;
+    font-weight:600; vertical-align:2px}
+  .lp-card{border:1px solid var(--p-line); border-radius:13px; padding:2px 16px; margin:6px 0;
+    box-shadow:0 1px 2px rgba(26,26,24,.03)}
+  .lp-card .lp-row{border-bottom:0}
+  /* the app's own dialog, over the page it belongs to */
+  .dim{position:absolute; inset:0; z-index:3; display:grid; place-items:center;
+    background:rgba(26,26,24,.34)}
+  .dlg{width:620px; max-height:86%; display:flex; flex-direction:column;
+    background:var(--p-bg); border:1px solid var(--p-line); border-radius:16px;
+    box-shadow:0 2px 6px rgba(20,20,19,.06), 0 30px 60px -24px rgba(20,20,19,.45);
+    overflow:hidden}
+  .dlg-h{padding:18px 20px 14px}
+  .dlg-t{margin:0; font-family:var(--serif); font-weight:400; font-size:20px;
+    letter-spacing:-.01em}
+  .dlg-s{margin:3px 0 0; font-size:12.6px; color:var(--p-faint)}
+  .dlg-b{padding:2px 20px 18px; display:flex; flex-direction:column; gap:22px;
+    overflow:hidden}
+  .spk-v{display:flex; flex-direction:column; gap:9px}
+  .spk-v-n{font-size:10.5px; letter-spacing:.07em; text-transform:uppercase;
+    color:var(--p-ink)}
+  .spk-refs{display:flex; flex-direction:column; gap:8px}
+  .spk-ref{margin:0; padding-left:13px; border-left:2px solid var(--p-line);
+    font-size:13.5px; line-height:1.55; color:var(--p-ink)}
+  .spk-field{padding:9px 12px; background:var(--p-bg); border:1px solid var(--p-line);
+    border-radius:10px; font-size:13.5px; color:var(--p-faint)}
+  .dlg-f{display:flex; align-items:center; justify-content:flex-end; gap:10px;
+    padding:14px 20px; border-top:1px solid var(--p-line-soft)}
+  .dlg-f .btn{display:inline-flex; align-items:center; height:32px; padding:0 14px;
+    border:1px solid var(--p-line); border-radius:9px; font-size:12.8px; font-weight:550}
+  .dlg-f .btn-off{background:var(--p-tint); border-color:var(--p-line);
+    color:var(--p-faint)}
+  .popwrap{position:relative; height:0}
+  .menu.pop{position:absolute; left:430px; top:10px; margin:0; z-index:2}
+  .sp-row{display:flex; align-items:center; gap:11px}
+  .sp-av{flex:none; width:26px; height:26px; border-radius:50%; display:grid;
+    place-items:center; font-size:10.5px; font-weight:700; color:#fff}
+  .sp-n{flex:1; font-size:14.4px}
+  .sp-f{flex:1; font-size:14.4px; color:var(--p-faint); border:1px solid var(--p-line);
+    border-radius:8px; padding:5px 9px}
+  .sp-s{font-size:12.6px; color:var(--p-faint)}
+  .menu{width:340px; margin-top:16px; background:#fff;
+    border:1px solid var(--p-line); border-radius:14px; padding:7px;
+    box-shadow:0 2px 4px rgba(26,26,24,.04), 0 20px 44px -22px rgba(26,26,24,.5)}
+  .menu div{padding:10px 12px; border-radius:9px; font-size:14.4px}
+  .menu div.on{background:var(--p-tint)}
+  .menu .hd{padding:8px 12px 6px; font-size:11px; letter-spacing:.07em;
+    text-transform:uppercase; color:var(--p-faint)}
+
+  .desk{position:relative; height:100%;
+    background:linear-gradient(150deg,#3A4A63,#6E6076 55%,#8C7A63)}
+  .win{position:absolute; left:5%; top:6%; right:7%; bottom:5%; background:#fff;
+    border-radius:13px; overflow:hidden;
+    box-shadow:0 3px 8px rgba(0,0,0,.28), 0 44px 90px -26px rgba(0,0,0,.8)}
+  .bar{display:flex; gap:7px; padding:12px 14px; border-bottom:1px solid var(--p-line-soft)}
+  .bar i{width:11px; height:11px; border-radius:50%; background:#E0DCD5; display:block}
+  .capsule{position:absolute; right:2.5%; bottom:9%; width:46px; padding:11px 0 9px;
+    background:#22262B; border-radius:999px; display:flex; flex-direction:column;
+    align-items:center; gap:9px; box-shadow:0 18px 34px -10px rgba(0,0,0,.75)}
+  .eq{display:flex; align-items:flex-end; gap:2.5px; height:13px}
+  .eq b{width:3px; background:#3FBF74; border-radius:2px; display:block}
+  .stop{width:24px; height:24px; border-radius:50%; background:var(--p-red);
+    display:grid; place-items:center}
+  .stop i{width:8px; height:8px; border-radius:2px; background:#fff; display:block}
+
+  .rail{position:fixed; left:0; right:0; bottom:0; height:2px; background:rgba(26,26,24,.08)}
+  .rail i{display:block; height:100%; background:var(--ink);
+    transition:width .4s cubic-bezier(.2,.7,.2,1)}
+  .count{position:fixed; right:clamp(18px,3vw,36px); bottom:20px; font-size:11.5px;
+    letter-spacing:.1em; color:var(--dim); font-variant-numeric:tabular-nums; z-index:3}
+  .hint{position:fixed; left:clamp(20px,4vw,44px); bottom:20px; font-size:11.5px;
+    letter-spacing:.1em; color:var(--dim); z-index:3}
+  .nav{position:fixed; inset:0; display:flex; z-index:2}
+  .nav button{flex:1; background:none; border:0; cursor:default;
+    -webkit-tap-highlight-color:transparent}
+  /* no focus ring here: these two buttons are half the screen each, so a
+     ring on one draws a white box the height of the slide. The deck is
+     driven by the arrow keys, which is where the keyboard belongs. */
+  .nav button:focus{outline:0}
+  .nav button:focus-visible{outline:0}
+  @media (max-width:980px){
+    .feat{grid-template-columns:1fr; align-content:center; gap:22px}
+    .slide{padding-right:clamp(28px,6vw,110px)}
+    .screen{height:46vh; border-right:1px solid var(--hair); border-radius:18px}
+    .heroes{grid-template-columns:repeat(2,minmax(0,1fr))}
+    .pane{grid-template-columns:1fr}
+    .pane > .main{display:none}
+    body{overflow:auto}
+  }
+</style>
+
+<div class="deck" id="deck">
+
+  <section class="slide title" data-on="true">
+    <div>
+      <h1>AI&nbsp;Meetings</h1>
+    </div>
+  </section>
+
+
+  <section class="slide journey table">
+    <h2>The user journey.</h2>
+    <div class="matrix">
+      <div class="mhead"></div>
+      <div class="mhead">Today</div>
+      <div class="mhead">With AI Meetings</div>
+      <div class="mhead">What we optimise for</div>
+      <div class="mhead">Feature</div>
+
+      <div class="mstep" style="grid-row:span 3">Before</div>
+      <div class="mcell was">You dig through Slack, email and the docs to work out what this call is about.</div><div class="mcell">It has already read all of it, and the brief is there when you open the meeting.</div><div class="mcell aim">You know what the call is about before it starts.</div><div class="mcell feat-list"><span class="fmk" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3.5h8.5L19 8v12.5H6z"/><path d="M14 3.5V8h5"/><path d="M9 12.5h7M9 16h4.5"/></svg></span>Meeting briefs</div>
+      <div class="mcell was">You can&rsquo;t remember who&rsquo;s on it or what they asked for.</div><div class="mcell">Everyone on the invite has a page with their history.</div><div class="mcell aim">You know who you&rsquo;re talking to.</div><div class="mcell feat-list"><span class="fmk" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8.6" r="3.6"/><path d="M5.4 19.8a6.6 6.6 0 0 1 13.2 0"/></svg></span>People insights</div>
+      <div class="mcell was">You promised to send them something last time and never did.</div><div class="mcell">What they asked for is already written and attached.</div><div class="mcell aim">You turn up with the thing they&rsquo;ve been waiting for.</div><div class="mcell feat-list"><span class="fmk" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3.6 20.4 8 12 12.4 3.6 8z"/><path d="m3.6 12.4 8.4 4.4 8.4-4.4"/></svg></span>Proactive artefacts</div>
+
+      <div class="mstep is-top" style="grid-row:span 4">During</div>
+      <div class="mcell was is-top">You&rsquo;re typing notes while you&rsquo;re trying to listen.</div><div class="mcell is-top">The transcript writes itself, and it knows who said what.</div><div class="mcell aim is-top">You can actually pay attention to the conversation.</div><div class="mcell feat-list is-top"><span class="fmk" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 10.2v3.6M8 6.6v10.8M12 8.8v6.4M16 5.4v13.2M20 9.6v4.8"/></svg></span>Speaker diarisation</div>
+      <div class="mcell was">Someone asks something you can&rsquo;t answer, so you defer it.</div><div class="mcell">The answer comes up while they&rsquo;re still talking.</div><div class="mcell aim">You answer it there and then.</div><div class="mcell feat-list"><span class="fmk" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4.2c1.67 5.74 2.06 6.13 7.8 7.8-5.74 1.67-6.13 2.06-7.8 7.8-1.67-5.74-2.06-6.13-7.8-7.8 5.74-1.67 6.13-2.06 7.8-7.8Z"/></svg></span>Cues</div>
+      <div class="mcell was">You need last quarter&rsquo;s numbers and they&rsquo;re in another tab.</div><div class="mcell">You can ask about the account without leaving the meeting.</div><div class="mcell aim">Nothing has to wait for a follow-up email.</div><div class="mcell feat-list"><span class="fmk" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M20.4 11.7c0 3.85-3.76 6.97-8.4 6.97-.94 0-1.85-.13-2.69-.36L4.4 19.9l1.48-3.36C4.5 15.28 3.6 13.6 3.6 11.7c0-3.85 3.76-6.97 8.4-6.97s8.4 3.12 8.4 6.97z"/></svg></span>Ask anything</div>
+      <div class="mcell was">A bot joins the call to record it, and everyone can see it sitting there.</div><div class="mcell">It records from your own machine. Nothing joins the call.</div><div class="mcell aim">No bot in the participant list, and nothing to explain.</div><div class="mcell feat-list"><span class="fmk" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="5" width="16" height="11" rx="1.8"/><path d="M2.5 19.5h19"/></svg></span>Native recording</div>
+
+      <div class="mstep is-top" style="grid-row:span 4">After</div>
+      <div class="mcell was is-top">You write it up tomorrow, if you write it up at all.</div><div class="mcell is-top">The summary is ready the moment you stop recording.</div><div class="mcell aim is-top">The write-up is done before you get up.</div><div class="mcell feat-list is-top"><span class="fmk" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M5 5.5h14M5 10h14M5 14.5h9M5 19h6"/></svg></span>Meeting summaries</div>
+      <div class="mcell was">Every meeting reads differently depending on who wrote it up.</div><div class="mcell">Notes and summaries come out in the format your team uses.</div><div class="mcell aim">Everyone&rsquo;s meetings read the same way.</div><div class="mcell feat-list"><span class="fmk" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3.6" y="3.6" width="7.4" height="7.4" rx="1.8"/><rect x="13" y="3.6" width="7.4" height="7.4" rx="1.8"/><rect x="3.6" y="13" width="7.4" height="7.4" rx="1.8"/><rect x="13" y="13" width="7.4" height="7.4" rx="1.8"/></svg></span>Templates</div>
+      <div class="mcell was">What you promised is buried in your notes, if it&rsquo;s anywhere.</div><div class="mcell">What you agreed to comes out as a list you can tick off.</div><div class="mcell aim">You don&rsquo;t drop what you said you&rsquo;d do.</div><div class="mcell feat-list"><span class="fmk" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="4" width="16" height="16" rx="3.4"/><path d="m8.4 12.2 2.6 2.6 4.6-5"/></svg></span>Suggested do lists</div>
+      <div class="mcell was">You forward your notes to whoever missed it.</div><div class="mcell">They open the same page you&rsquo;re on.</div><div class="mcell aim">Everyone is reading the same thing.</div><div class="mcell feat-list"><span class="fmk" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="9.4" r="3.1"/><path d="M3.4 19.4a5.6 5.6 0 0 1 11.2 0"/><path d="M16.2 6.6a3 3 0 0 1 0 5.6M17.6 19.4a5.7 5.7 0 0 0-2.1-4.4"/></svg></span>Multiplayer</div>
+
+    </div>
+  </section>
+
+  <section class="slide journey gridslide">
+    <h2>Key capabilities.</h2>
+    <div class="tiles">
+      <figure class="tile"><figcaption><span class="tmk" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M20.4 11.7c0 3.85-3.76 6.97-8.4 6.97-.94 0-1.85-.13-2.69-.36L4.4 19.9l1.48-3.36C4.5 15.28 3.6 13.6 3.6 11.7c0-3.85 3.76-6.97 8.4-6.97s8.4 3.12 8.4 6.97z"/></svg></span>Ask anything</figcaption>
+        <div class="shot"><div class="mini">
+      <div class="page">
+      
+      <div class="askbar"><span class="askbar-plus"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5.5v13M5.5 12h13"/></svg></span><span class="askbar-ph">Ask about an upcoming or a previous meeting</span><span class="askbar-go"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5"/><path d="m5.5 11.5 6.5-6.5 6.5 6.5"/></svg></span></div>
+      <div class="sect">Past</div>
+        <div class="lp-row"><span class="lp-t"><b>15:20</b><i>30m</i></span><span class="lp-dot"></span><span class="lp-m"><span class="lp-n">Pipeline stand-up</span><span class="lp-w">Matt Rivera, John Whitaker and 7 others</span></span></div>
+        <div class="lp-row"><span class="lp-t"><b>16:15</b><i>12m</i></span><span class="lp-dot"></span><span class="lp-m"><span class="lp-n">Orion &mdash; pricing escalation</span><span class="lp-w">Priya Raman, Dev Anand and you</span></span></div>
+        <div class="lp-row"><span class="lp-t"><b>17:20</b><i>45m</i></span><span class="lp-dot"></span><span class="lp-m"><span class="lp-n">Brightpath &mdash; phase two rollout</span><span class="lp-w">Callum Reid, Dev Anand and you</span></span></div>
+      <div class="sect" style="margin-top:18px">Upcoming</div>
+      <div class="lp-card"><div class="lp-row"><span class="lp-t"><b>18:35</b><i>1h</i></span><span class="lp-dot"></span><span class="lp-m"><span class="lp-n">Halden &mdash; expansion pricing review <span class="lp-now">Now</span></span><span class="lp-w">Rachel Okafor, Owen Castillo and you</span></span><span class="pill">&#10022; Brief</span></div></div>
+        <div class="lp-row"><span class="lp-t"><b>20:10</b><i>30m</i></span><span class="lp-dot"></span><span class="lp-m"><span class="lp-n">Vantage &mdash; data residency follow-up</span><span class="lp-w">Meera Nair, Dev Anand and you</span></span><span class="pill">&#10022; Brief</span></div>
+    </div></div></div></figure>
+      <figure class="tile"><figcaption><span class="tmk" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3.5h8.5L19 8v12.5H6z"/><path d="M14 3.5V8h5"/><path d="M9 12.5h7M9 16h4.5"/></svg></span>Meeting briefs</figcaption>
+        <div class="shot"><div class="mini">
+        <div class="page">
+          <div class="tabs" style="margin-top:0"><span>My Notes</span><b>Brief</b></div>
+          <div class="strip"><span>Generated today at 08:10</span><span>Regenerate</span></div>
+          <div class="body">
+            <div class="par"><span class="nm">Owen</span> approved the structure on Friday and
+              <span class="nm">Rachel</span> has been waiting since Tuesday. Their board meets
+              Thursday.</div>
+            <h4>Where it stands</h4>
+            <ul><li>$380k expansion, 120 seats on top of the 340 they run.</li>
+              <li>Discount floor signed off Friday &mdash; 22% at 36 months.</li>
+              <li>Nothing has gone to <span class="nm">Rachel</span> yet.</li></ul>
+          </div>
+        </div></div></div></figure>
+      <figure class="tile"><figcaption><span class="tmk" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8.6" r="3.6"/><path d="M5.4 19.8a6.6 6.6 0 0 1 13.2 0"/></svg></span>People insights</figcaption>
+        <div class="shot"><div class="mini">
+        <div class="page">
+          <div style="display:flex; gap:16px; align-items:center">
+            <span style="flex:none;width:56px;height:56px;border-radius:50%;overflow:hidden;display:block"><svg viewBox="0 0 48 48" aria-hidden="true" style="width:100%;height:100%;display:block"><defs><linearGradient id="fRachelOkafor" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#F4E3DC"/><stop offset="1" stop-color="#E8CFC4"/></linearGradient></defs><circle cx="24" cy="24" r="24" fill="url(#fRachelOkafor)"/><path d="M8 48a16 16 0 0 1 32 0z" fill="#BE855F"/><circle cx="24" cy="20" r="9.5" fill="#BE855F"/><path d="M14 19.5a9.5 9.5 0 0 1 19 0c1-1.4.3-3.2-1-3.6.5-1.8-.9-3.2-2.3-3-.2-1.8-2-2.8-3.4-2.2-.9-1.5-3.1-1.5-4 0-1.4-.6-3.2.4-3.4 2.2-1.4-.2-2.8 1.2-2.3 3-1.3.4-2 2.2-1 3.6z" fill="#5A2E22"/></svg></span>
+            <div><div class="pname">Rachel Okafor<span class="tag">External</span></div>
+              <div class="prole">VP Operations &middot; Halden &middot; Delaware, Ohio</div></div>
+          </div>
+          <div class="body">
+            <h4>Who they are</h4>
+            <ul>
+              <li>Runs operations for the packaging division &mdash; 1,400 people across eleven plants.</li>
+              <li>Eleven years at <u>Halden</u>, the last three in this role.</li>
+              <li>Sponsored the first 340 seats and ran the rollout herself.</li>
+              <li>Asked for a ramp last time and did not get one.</li>
+            </ul>
+          </div>
+        </div></div></div></figure>
+      <figure class="tile"><figcaption><span class="tmk" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3.6 20.4 8 12 12.4 3.6 8z"/><path d="m3.6 12.4 8.4 4.4 8.4-4.4"/></svg></span>Proactive artefacts</figcaption>
+        <div class="shot"><div class="mini">
+        <div class="page">
+          <div class="body" style="margin-top:0"><h4 style="margin-top:0">Prepared for you</h4></div>
+          <div class="rows">
+            <div class="row"><span class="ic" style="background:#2B579A">W</span>
+              <div><div class="n">Data residency</div><div class="w">Meera asked for this on the QBR on 28 August.</div></div></div>
+            <div class="row"><span class="ic" style="background:#C43E1C">P</span>
+              <div><div class="n">Residency walkthrough</div><div class="w">Six slides for her own customers.</div></div></div>
+            <div class="row"><span class="ic" style="background:#2B579A">W</span>
+              <div><div class="n">Sub-processors</div><div class="w">The provider list their security team asked for.</div></div></div>
+          </div>
+        </div></div></div></figure>
+      <figure class="tile"><figcaption><span class="tmk" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4.2c1.67 5.74 2.06 6.13 7.8 7.8-5.74 1.67-6.13 2.06-7.8 7.8-1.67-5.74-2.06-6.13-7.8-7.8 5.74-1.67 6.13-2.06 7.8-7.8Z"/></svg></span>Cues</figcaption>
+        <div class="shot"><div class="mini">
+        <div class="page">
+          <div class="sect" style="margin-top:0">Answers</div>
+          <div class="cue"><span class="dot" style="background:var(--p-red)">!</span>
+            <div style="flex:1">
+              <div class="who"><span style="color:var(--p-ink);font-weight:550">Rachel Okafor</span><span>04:12</span></div>
+              <div class="q">&ldquo;Didn&rsquo;t you have an outage in March?&rdquo;</div>
+              <div class="ans">One P2 on 14 March &mdash; 41 minutes, no data loss, postmortem the same week.</div>
+            </div></div>
+          <div class="sect">Questions</div>
+          <div class="cue"><span class="dot" style="background:var(--p-green)">+</span>
+            <div style="flex:1">
+              <div class="who"><span style="color:var(--p-ink);font-weight:550">Deal desk</span><span>18:41</span></div>
+              <div class="q">&ldquo;Can you send us the SOC 2 report?&rdquo;</div>
+              <div class="foot"><span class="quiet">Dismiss</span><span class="pill">&#10022; Run</span></div>
+            </div></div>
+        </div></div></div></figure>
+      <figure class="tile"><figcaption><span class="tmk" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 10.2v3.6M8 6.6v10.8M12 8.8v6.4M16 5.4v13.2M20 9.6v4.8"/></svg></span>Speaker diarisation</figcaption>
+        <div class="shot"><div class="mini">
+        <div class="page">
+          <div class="strip" style="margin-top:0"><span style="color:var(--p-green)">&#9679; Recording &middot; 04:31</span>
+            <span class="pill" style="height:27px">Label Speakers</span></div>
+          <div style="margin-top:6px">
+            <div class="line"><div><div class="spk">Rachel Okafor</div><div class="tm">04:06</div></div>
+              <div class="said">Before we get to the number &mdash; is this the whole estate?</div></div>
+            <div class="line"><div><div class="spk">Owen Castillo</div><div class="tm">04:12</div></div>
+              <div class="said">The whole estate. Which is why four per cent is where we landed.</div></div>
+            <div class="line"><div><div class="spk" style="color:var(--p-faint)">Speaker 3</div><div class="tm">04:31</div></div>
+              <div class="said">Four is below what the contract indexes to.</div></div>
+          </div>
+        </div></div></div></figure>
+      <figure class="tile"><figcaption><span class="tmk" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M5 5.5h14M5 10h14M5 14.5h9M5 19h6"/></svg></span>Meeting summaries</figcaption>
+        <div class="shot"><div class="mini">
+        <div class="page">
+          <div class="strip" style="margin-top:0"><span>&#10022; Written at 13:52</span><span>Regenerate</span></div>
+          <div class="body">
+            <div class="par">Orion called this at a day&rsquo;s notice to hold the FY26 uplift
+              at 4%, ahead of a board meeting on Thursday.</div>
+            <h4>Where we landed</h4>
+            <ul><li>4% is below what the contract indexes to, and that was said plainly.</li>
+              <li>No number was given back. The position goes in writing.</li></ul>
+            <h4>What is still open</h4>
+            <ul><li>Whether 4% is a ceiling or an opening.</li></ul>
+          </div>
+        </div></div></div></figure>
+      <figure class="tile"><figcaption><span class="tmk" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="4" width="16" height="16" rx="3.4"/><path d="m8.4 12.2 2.6 2.6 4.6-5"/></svg></span>Suggested do lists</figcaption>
+        <div class="shot"><div class="mini">
+        <div class="page">
+          <div class="body" style="margin-top:0"><h4 style="margin-top:0">Suggested Do Lists</h4></div>
+          <div class="todo">
+            <div><span class="box on">&#10003;</span><span class="struck">Send the written position on the FY26 uplift</span></div>
+            <div><span class="box"></span><span style="flex:1">Get the three-year figure from Deal desk</span>
+              <span class="pill" style="height:28px">+ Add to Do List</span></div>
+            <div><span class="box"></span><span>Ask whether their board sees the position</span></div>
+            <div><span class="box"></span><span>Confirm whether the whole estate is in scope</span></div>
+          </div>
+        </div></div></div></figure>
+      <figure class="tile"><figcaption><span class="tmk" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3.6" y="3.6" width="7.4" height="7.4" rx="1.8"/><rect x="13" y="3.6" width="7.4" height="7.4" rx="1.8"/><rect x="3.6" y="13" width="7.4" height="7.4" rx="1.8"/><rect x="13" y="13" width="7.4" height="7.4" rx="1.8"/></svg></span>Templates</figcaption>
+        <div class="shot"><div class="mini">
+        <div class="page" style="display:grid;grid-template-columns:300px 1fr;gap:26px">
+          <div class="menu" style="margin:0;width:300px">
+            <div class="hd">Templates</div>
+            <div class="on">Customer: Discovery</div>
+            <div>Customer: Existing</div>
+            <div>Product demo</div>
+            <div>Quarterly business review</div>
+            <div>One-on-one</div>
+          </div>
+          <div class="body" style="margin-top:0">
+            <h4 style="margin-top:0">Where they are today</h4>
+            <ul><li class="ghost">Systems in use, and who owns them</li></ul>
+            <h4>What they are trying to fix</h4>
+            <ul><li class="ghost">The problem in their words</li></ul>
+            <h4>Next steps</h4>
+            <ul><li class="ghost">What we send, and by when</li></ul>
+          </div>
+        </div></div></div></figure>
+      <figure class="tile"><figcaption><span class="tmk" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="5" width="16" height="11" rx="1.8"/><path d="M2.5 19.5h19"/></svg></span>Native recording</figcaption>
+        <div class="shot"><div class="mini">
+        <div class="desk">
+          <div class="win">
+            <div class="bar"><i></i><i></i><i></i></div>
+            <div class="page" style="padding:20px 24px">
+              <div class="strip" style="margin-top:0"><span style="color:var(--p-green)">&#9679; Recording &middot; 04:31</span></div>
+              <div class="line" style="grid-template-columns:130px 1fr">
+                <div><div class="spk">Rachel Okafor</div><div class="tm">04:06</div></div>
+                <div class="said">Is this the whole estate?</div></div>
+              <div class="line" style="grid-template-columns:130px 1fr">
+                <div><div class="spk">Owen Castillo</div><div class="tm">04:12</div></div>
+                <div class="said">The whole estate.</div></div>
+            </div>
+          </div>
+          <div class="capsule">
+            <div class="eq"><b style="height:6px"></b><b style="height:12px"></b><b style="height:8px"></b></div>
+            <div class="stop"><i></i></div>
+          </div>
+        </div></div></div></figure>
+      <figure class="tile"><figcaption><span class="tmk" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="9.4" r="3.1"/><path d="M3.4 19.4a5.6 5.6 0 0 1 11.2 0"/><path d="M16.2 6.6a3 3 0 0 1 0 5.6M17.6 19.4a5.7 5.7 0 0 0-2.1-4.4"/></svg></span>Multiplayer</figcaption>
+        <div class="shot"><div class="mini">
+        <div class="page">
+          <div class="top" style="margin-bottom:14px"><span class="faces">
+              <span class="face" style="background:#2F6FEB">RO</span>
+              <span class="face" style="background:#C4783A">OC</span>
+              <span class="face" style="background:#5B8C6E">RB</span></span>
+            <span class="chip">Share</span></div>
+          <div class="body" style="margin-top:0">
+            <div class="par" style="margin-top:0">Halden came in to settle the 120-seat expansion.
+              <span class="sel sel-b">The discount floor held at 22%</span><span class="cur cur-b"><b>Rachel Okafor</b></span>,
+              and the ramp came up twice.</div>
+            <h4>Where we landed</h4>
+            <ul><li>120 seats on top of the 340 they run, at 22%.</li>
+              <li>Nothing was promised on the ramp<span class="cur cur-o"><b>Owen Castillo</b></span></li>
+              <li><span class="sel sel-o">The written position goes over tonight.</span></li></ul>
+          </div>
+        </div></div></div></figure>
+    </div>
+  </section>
+
+  <section class="slide feat">
+    <div class="say">
+      <div class="eyebrow">01</div>
+      <h2>Ask Anything</h2>
+      <div class="logos">
+        <span class="lg" title="Salesforce"><svg version="1.1" viewBox="0 0 273 191" xmlns="http://www.w3.org/2000/svg" xmlns:cc="http://creativecommons.org/ns#" xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#" xmlns:xlink="http://www.w3.org/1999/xlink"> <title>Salesforce.com logo</title> <desc>A cloud computing company based in San Francisco, California, United States</desc> <metadata> <rdf:RDF> <cc:Work rdf:about=""> <dc:format>image/svg+xml</dc:format> <dc:type rdf:resource="http://purl.org/dc/dcmitype/StillImage"/> <dc:title/> </cc:Work> </rdf:RDF> </metadata> <defs> <path id="a" d="m0.06 0.5h272v190h-272z"/> </defs> <g fill-rule="evenodd"> <mask id="b" fill="#fff"> <use xlink:href="#a"/> </mask> <path d="m113 21.3c8.78-9.14 21-14.8 34.5-14.8 18 0 33.6 10 42 24.9a58 58 0 0 1 23.7-5.05c32.4 0 58.7 26.5 58.7 59.2s-26.3 59.2-58.7 59.2c-3.96 0-7.82-0.398-11.6-1.15-7.35 13.1-21.4 22-37.4 22a42.7 42.7 0 0 1-18.8-4.32c-7.45 17.5-24.8 29.8-45 29.8-21.1 0-39-13.3-45.9-32a45.1 45.1 0 0 1-9.34 0.972c-25.1 0-45.4-20.6-45.4-45.9 0-17 9.14-31.8 22.7-39.8a52.6 52.6 0 0 1-4.35-21c0-29.2 23.7-52.8 52.9-52.8 17.1 0 32.4 8.15 42 20.8" fill="#00A1E0" mask="url(#b)"/> <path d="m39.4 99.3c-0.171 0.446 0.061 0.539 0.116 0.618 0.511 0.37 1.03 0.638 1.55 0.939 2.78 1.47 5.4 1.9 8.14 1.9 5.58 0 9.05-2.97 9.05-7.75v-0.094c0-4.42-3.92-6.03-7.58-7.18l-0.479-0.155c-2.77-0.898-5.16-1.68-5.16-3.5v-0.093c0-1.56 1.4-2.71 3.56-2.71 2.4 0 5.26 0.799 7.09 1.81 0 0 0.542 0.35 0.739-0.173 0.107-0.283 1.04-2.78 1.14-3.06 0.106-0.293-0.08-0.514-0.271-0.628-2.1-1.28-5-2.15-8-2.15l-0.557 2e-3c-5.11 0-8.68 3.09-8.68 7.51v0.095c0 4.66 3.94 6.18 7.62 7.23l0.592 0.184c2.68 0.824 5 1.54 5 3.42v0.094c0 1.73-1.51 3.02-3.93 3.02-0.941 0-3.94-0.016-7.19-2.07-0.393-0.229-0.617-0.394-0.92-0.579-0.16-0.097-0.56-0.272-0.734 0.252l-1.1 3.06m81.7 0c-0.171 0.446 0.061 0.539 0.118 0.618 0.509 0.37 1.03 0.638 1.55 0.939 2.78 1.47 5.4 1.9 8.14 1.9 5.58 0 9.05-2.97 9.05-7.75v-0.094c0-4.42-3.91-6.03-7.58-7.18l-0.479-0.155c-2.77-0.898-5.16-1.68-5.16-3.5v-0.093c0-1.56 1.4-2.71 3.56-2.71 2.4 0 5.25 0.799 7.09 1.81 0 0 0.542 0.35 0.74-0.173 0.106-0.283 1.04-2.78 1.13-3.06 0.107-0.293-0.08-0.514-0.27-0.628-2.1-1.28-5-2.15-8-2.15l-0.558 2e-3c-5.11 0-8.68 3.09-8.68 7.51v0.095c0 4.66 3.94 6.18 7.62 7.23l0.591 0.184c2.69 0.824 5 1.54 5 3.42v0.094c0 1.73-1.51 3.02-3.93 3.02-0.943 0-3.95-0.016-7.19-2.07-0.393-0.229-0.623-0.387-0.921-0.579-0.101-0.064-0.572-0.248-0.733 0.252l-1.1 3.06m55.8-9.36c0 2.7-0.504 4.83-1.49 6.34-0.984 1.49-2.47 2.22-4.54 2.22s-3.55-0.724-4.52-2.21c-0.977-1.5-1.47-3.64-1.47-6.34 0-2.7 0.496-4.82 1.47-6.31 0.968-1.48 2.44-2.19 4.52-2.19s3.56 0.717 4.54 2.19c0.992 1.49 1.49 3.61 1.49 6.31m4.66-5.01c-0.459-1.55-1.17-2.91-2.12-4.05-0.951-1.14-2.15-2.06-3.58-2.72-1.42-0.665-3.1-1-5-1s-3.57 0.337-5 1c-1.42 0.664-2.63 1.58-3.58 2.72-0.948 1.14-1.66 2.5-2.12 4.05-0.455 1.54-0.686 3.22-0.686 5.01 0 1.79 0.231 3.47 0.686 5.01 0.457 1.55 1.17 2.91 2.12 4.05 0.951 1.14 2.16 2.05 3.58 2.7 1.43 0.648 3.11 0.978 5 0.978 1.89 0 3.57-0.33 4.99-0.978 1.42-0.648 2.63-1.56 3.58-2.7 0.949-1.14 1.66-2.5 2.12-4.05 0.454-1.54 0.685-3.22 0.685-5.01 0-1.78-0.231-3.47-0.685-5.01m38.3 12.8c-0.153-0.453-0.595-0.282-0.595-0.282-0.677 0.259-1.4 0.499-2.17 0.619-0.776 0.122-1.64 0.183-2.55 0.183-2.25 0-4.05-0.671-5.33-2-1.29-1.33-2.01-3.47-2-6.37 7e-3 -2.64 0.645-4.62 1.79-6.14 1.13-1.5 2.87-2.28 5.17-2.28 1.92 0 3.39 0.223 4.93 0.705 0 0 0.365 0.159 0.54-0.322 0.409-1.13 0.711-1.94 1.15-3.18 0.124-0.355-0.18-0.505-0.291-0.548-0.604-0.236-2.03-0.623-3.11-0.786-1.01-0.154-2.18-0.234-3.5-0.234-1.96 0-3.7 0.335-5.19 0.999-1.49 0.663-2.75 1.58-3.75 2.72-1 1.14-1.76 2.5-2.27 4.05-0.505 1.54-0.76 3.23-0.76 5.02 0 3.86 1.04 6.99 3.1 9.28 2.06 2.3 5.16 3.46 9.2 3.46 2.39 0 4.84-0.483 6.6-1.18 0 0 0.336-0.162 0.19-0.554l-1.15-3.16m8.15-10.4c0.223-1.5 0.634-2.75 1.28-3.72 0.967-1.48 2.44-2.29 4.51-2.29 2.07 0 3.44 0.814 4.42 2.29 0.65 0.975 0.934 2.27 1.04 3.72l-11.3-2e-3zm15.7-3.3c-0.397-1.49-1.38-3-2.02-3.69-1.02-1.09-2.01-1.86-3-2.28a11.5 11.5 0 0 0-4.52-0.917c-1.97 0-3.76 0.333-5.21 1.01-1.45 0.682-2.67 1.61-3.63 2.77-0.959 1.16-1.68 2.53-2.14 4.1-0.46 1.55-0.692 3.25-0.692 5.03 0 1.82 0.241 3.51 0.715 5.04 0.479 1.54 1.25 2.89 2.29 4.01 1.04 1.13 2.37 2.01 3.97 2.63 1.59 0.615 3.52 0.934 5.73 0.927 4.56-0.015 6.96-1.03 7.94-1.58 0.175-0.098 0.34-0.267 0.134-0.754l-1.03-2.89c-0.158-0.431-0.594-0.275-0.594-0.275-1.13 0.422-2.73 1.18-6.48 1.17-2.45-4e-3 -4.26-0.727-5.4-1.86-1.16-1.16-1.74-2.85-1.83-5.25l15.8 0.012s0.416-4e-3 0.459-0.41c0.017-0.168 0.541-3.24-0.471-6.79zm-142 3.3c0.223-1.5 0.635-2.75 1.28-3.72 0.968-1.48 2.44-2.29 4.51-2.29 2.07 0 3.44 0.814 4.42 2.29 0.649 0.975 0.933 2.27 1.04 3.72l-11.3-2e-3zm15.7-3.3c-0.396-1.49-1.38-3-2.02-3.69-1.02-1.09-2.01-1.86-3-2.28a11.5 11.5 0 0 0-4.52-0.917c-1.97 0-3.76 0.333-5.21 1.01-1.45 0.682-2.67 1.61-3.63 2.77-0.957 1.16-1.68 2.53-2.14 4.1-0.459 1.55-0.69 3.25-0.69 5.03 0 1.82 0.239 3.51 0.716 5.04 0.478 1.54 1.25 2.89 2.28 4.01 1.04 1.13 2.37 2.01 3.97 2.63 1.59 0.615 3.51 0.934 5.73 0.927 4.56-0.015 6.96-1.03 7.94-1.58 0.174-0.098 0.34-0.267 0.133-0.754l-1.03-2.89c-0.159-0.431-0.595-0.275-0.595-0.275-1.13 0.422-2.73 1.18-6.48 1.17-2.44-4e-3 -4.26-0.727-5.4-1.86-1.16-1.16-1.74-2.85-1.83-5.25l15.8 0.012s0.416-4e-3 0.459-0.41c0.017-0.168 0.541-3.24-0.472-6.79zm-49.8 13.6c-0.619-0.494-0.705-0.615-0.91-0.936-0.313-0.483-0.473-1.17-0.473-2.05 0-1.38 0.46-2.38 1.41-3.05-0.01 2e-3 1.36-1.18 4.58-1.14a32 32 0 0 1 4.28 0.365v7.17h2e-3s-2 0.431-4.26 0.567c-3.21 0.193-4.63-0.924-4.62-0.921zm6.28-11.1c-0.64-0.047-1.47-0.07-2.46-0.07-1.35 0-2.66 0.168-3.88 0.498-1.23 0.332-2.34 0.846-3.29 1.53a7.63 7.63 0 0 0-2.29 2.6c-0.559 1.04-0.844 2.26-0.844 3.64 0 1.4 0.243 2.61 0.723 3.6a6.54 6.54 0 0 0 2.06 2.47c0.877 0.638 1.96 1.11 3.21 1.39 1.24 0.283 2.64 0.426 4.18 0.426 1.62 0 3.23-0.136 4.79-0.399a95.1 95.1 0 0 0 3.97-0.772c0.526-0.121 1.11-0.28 1.11-0.28 0.39-0.099 0.36-0.516 0.36-0.516l-9e-3 -14.4c0-3.16-0.844-5.51-2.51-6.96-1.66-1.45-4.09-2.18-7.24-2.18-1.18 0-3.09 0.16-4.23 0.389 0 0-3.44 0.668-4.86 1.78 0 0-0.312 0.192-0.142 0.627l1.12 3c0.139 0.389 0.518 0.256 0.518 0.256s0.119-0.047 0.259-0.13c3.03-1.65 6.87-1.6 6.87-1.6 1.7 0 3.02 0.345 3.9 1.02 0.861 0.661 1.3 1.66 1.3 3.76v0.667c-1.35-0.196-2.6-0.309-2.6-0.309zm127-8.13a0.428 0.428 0 0 0-0.237-0.568c-0.269-0.102-1.61-0.385-2.64-0.449-1.98-0.124-3.08 0.21-4.07 0.654-0.978 0.441-2.06 1.15-2.66 1.97l-2e-3 -1.92c0-0.264-0.187-0.477-0.453-0.477h-4.04c-0.262 0-0.452 0.213-0.452 0.477v23.5a0.48 0.48 0 0 0 0.479 0.479h4.14a0.479 0.479 0 0 0 0.478-0.479v-11.8c0-1.58 0.174-3.15 0.521-4.14 0.342-0.979 0.807-1.76 1.38-2.32a4.79 4.79 0 0 1 1.95-1.17 7.68 7.68 0 0 1 2.12-0.298c0.825 0 1.73 0.212 1.73 0.212 0.304 0.034 0.473-0.152 0.576-0.426 0.271-0.721 1.04-2.88 1.19-3.31" fill="#FFFFFE"/> <path d="M162.201 67.548a13.258 13.258 0 0 0-1.559-.37 12.217 12.217 0 0 0-2.144-.166c-2.853 0-5.102.806-6.681 2.398-1.568 1.58-2.635 3.987-3.17 7.154l-.193 1.069h-3.581s-.437-.018-.529.459l-.588 3.28c-.041.314.094.51.514.508h3.486l-3.537 19.743c-.277 1.59-.594 2.898-.945 3.889-.346.978-.684 1.711-1.1 2.243-.403.515-.785.894-1.444 1.115-.544.183-1.17.267-1.856.267-.382 0-.89-.064-1.265-.139-.375-.074-.57-.158-.851-.276 0 0-.409-.156-.57.254-.131.335-1.06 2.89-1.17 3.206-.112.312.045.558.243.629.464.166.809.272 1.441.421.878.207 1.618.22 2.311.22 1.452 0 2.775-.204 3.872-.6 1.104-.399 2.065-1.094 2.915-2.035.919-1.015 1.497-2.078 2.05-3.528.547-1.437 1.013-3.221 1.386-5.3l3.554-20.109h5.196s.438.016.529-.459l.588-3.28c.041-.314-.093-.51-.515-.508h-5.043c.025-.114.254-1.888.833-3.558.247-.713.712-1.288 1.106-1.683a3.273 3.273 0 0 1 1.321-.822 5.48 5.48 0 0 1 1.693-.244c.475 0 .941.057 1.296.131.489.104.679.159.807.197.514.157.583.005.684-.244l1.206-3.312c.124-.356-.178-.506-.29-.55m-70.474 34.117c0 .264-.188.479-.452.479h-4.183c-.265 0-.453-.215-.453-.479V67.997c0-.263.188-.476.453-.476h4.183c.264 0 .452.213.452.476v33.668" fill="#FFFFFE"/> </g> </svg></span>
+        <span class="lg" title="HubSpot"><img src="data:image/png;base64,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" alt=""></span>
+        <span class="lg" title="Slack"><svg viewBox="0 0 127 127" xmlns="http://www.w3.org/2000/svg"> <path d="M27.2 80c0 7.3-5.9 13.2-13.2 13.2C6.7 93.2.8 87.3.8 80c0-7.3 5.9-13.2 13.2-13.2h13.2V80zm6.6 0c0-7.3 5.9-13.2 13.2-13.2 7.3 0 13.2 5.9 13.2 13.2v33c0 7.3-5.9 13.2-13.2 13.2-7.3 0-13.2-5.9-13.2-13.2V80z" fill="#E01E5A"/> <path d="M47 27c-7.3 0-13.2-5.9-13.2-13.2C33.8 6.5 39.7.6 47 .6c7.3 0 13.2 5.9 13.2 13.2V27H47zm0 6.7c7.3 0 13.2 5.9 13.2 13.2 0 7.3-5.9 13.2-13.2 13.2H13.9C6.6 60.1.7 54.2.7 46.9c0-7.3 5.9-13.2 13.2-13.2H47z" fill="#36C5F0"/> <path d="M99.9 46.9c0-7.3 5.9-13.2 13.2-13.2 7.3 0 13.2 5.9 13.2 13.2 0 7.3-5.9 13.2-13.2 13.2H99.9V46.9zm-6.6 0c0 7.3-5.9 13.2-13.2 13.2-7.3 0-13.2-5.9-13.2-13.2V13.8C66.9 6.5 72.8.6 80.1.6c7.3 0 13.2 5.9 13.2 13.2v33.1z" fill="#2EB67D"/> <path d="M80.1 99.8c7.3 0 13.2 5.9 13.2 13.2 0 7.3-5.9 13.2-13.2 13.2-7.3 0-13.2-5.9-13.2-13.2V99.8h13.2zm0-6.6c-7.3 0-13.2-5.9-13.2-13.2 0-7.3 5.9-13.2 13.2-13.2h33.1c7.3 0 13.2 5.9 13.2 13.2 0 7.3-5.9 13.2-13.2 13.2H80.1z" fill="#ECB22E"/> </svg></span>
+        <span class="lg" title="Teams"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48"> <path fill="#5059C9" d="M31 17h13.2A1.8 1.8 0 0 1 46 18.8v11.4a7.4 7.4 0 0 1-7.4 7.4h0A7.6 7.6 0 0 1 31 30V17Z"/> <circle cx="39.5" cy="10" r="4.6" fill="#5059C9"/> <circle cx="27" cy="8.6" r="5.9" fill="#7B83EB"/> <path fill="#7B83EB" d="M32.4 17H15.6A1.6 1.6 0 0 0 14 18.6v12.1A10.6 10.6 0 0 0 24 41.4 10.6 10.6 0 0 0 34 30.7V18.6A1.6 1.6 0 0 0 32.4 17Z"/> <rect x="2" y="11" rx="2.2" fill="#4B53BC"/> <path fill="#fff" d="M20.2 17.6H7.8v2.7h4.6v12.1h3.2V20.3h4.6v-2.7Z"/> </svg></span>
+        <span class="lg" title="Google Drive"><svg viewBox="0 0 87.3 78" xmlns="http://www.w3.org/2000/svg"> <path d="m6.6 66.85 3.85 6.65c.8 1.4 1.95 2.5 3.3 3.3l13.75-23.8h-27.5c0 1.55.4 3.1 1.2 4.5z" fill="#0066da"/> <path d="m43.65 25-13.75-23.8c-1.35.8-2.5 1.9-3.3 3.3l-25.4 44a9.06 9.06 0 0 0-1.2 4.5h27.5z" fill="#00ac47"/> <path d="m73.55 76.8c1.35-.8 2.5-1.9 3.3-3.3l1.6-2.75 7.65-13.25c.8-1.4 1.2-2.95 1.2-4.5h-27.502l5.852 11.5z" fill="#ea4335"/> <path d="m43.65 25 13.75-23.8c-1.35-.8-2.9-1.2-4.5-1.2h-18.5c-1.6 0-3.15.45-4.5 1.2z" fill="#00832d"/> <path d="m59.8 53h-32.3l-13.75 23.8c1.35.8 2.9 1.2 4.5 1.2h50.8c1.6 0 3.15-.45 4.5-1.2z" fill="#2684fc"/> <path d="m73.4 26.5-12.7-22c-.8-1.4-1.95-2.5-3.3-3.3l-13.75 23.8 16.15 28h27.45c0-1.55-.4-3.1-1.2-4.5z" fill="#ffba00"/> </svg></span>
+        <span class="lg" title="SharePoint"><svg viewBox="0 0 48 48" xmlns="http://www.w3.org/2000/svg"> <circle cx="20.5" cy="14.5" r="12.5" fill="#036C70"/> <circle cx="32" cy="26" r="11" fill="#1A9BA1"/> <circle cx="23" cy="36.5" r="8.5" fill="#37C6D0"/> <path d="M23 15H6.6A1.6 1.6 0 0 0 5 16.6v16.8A1.6 1.6 0 0 0 6.6 35H23a1.6 1.6 0 0 0 1.6-1.6V16.6A1.6 1.6 0 0 0 23 15z" fill="#03787C"/> <path d="M18.1 22.6a2.4 2.4 0 0 0-1-.9 3.4 3.4 0 0 0-1.5-.3 3 3 0 0 0-1 .15 2.2 2.2 0 0 0-.8.42 1.9 1.9 0 0 0-.5.65 1.9 1.9 0 0 0-.2.85 1.7 1.7 0 0 0 .2.83 2.2 2.2 0 0 0 .6.63 4.9 4.9 0 0 0 .9.52q.5.24 1.1.47a11 11 0 0 1 1.2.55 4.6 4.6 0 0 1 1 .72 3.2 3.2 0 0 1 .7 1 3.2 3.2 0 0 1 .3 1.4 3.5 3.5 0 0 1-.4 1.72 3.3 3.3 0 0 1-1 1.16 4.3 4.3 0 0 1-1.5.66 7.6 7.6 0 0 1-1.8.2 7.5 7.5 0 0 1-2.4-.4 4.6 4.6 0 0 1-1.8-1.1v-2.3a4 4 0 0 0 1.7 1.2 5.6 5.6 0 0 0 2.1.4 3.6 3.6 0 0 0 1-.14 2.6 2.6 0 0 0 .8-.4 1.9 1.9 0 0 0 .6-.63 1.7 1.7 0 0 0 .2-.83 1.8 1.8 0 0 0-.2-.9 2.4 2.4 0 0 0-.6-.68 5 5 0 0 0-1-.56q-.5-.26-1.2-.53a11 11 0 0 1-1.2-.57 4.4 4.4 0 0 1-1-.72 3.1 3.1 0 0 1-.6-.96 3.3 3.3 0 0 1-.3-1.32 3.3 3.3 0 0 1 .4-1.66 3.4 3.4 0 0 1 1-1.14 4.4 4.4 0 0 1 1.5-.66 7 7 0 0 1 1.7-.2 7 7 0 0 1 2 .25 4.2 4.2 0 0 1 1.4.6z" fill="#fff"/> </svg></span>
+        <span class="lg" title="OneDrive"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 32"> <defs> <linearGradient id="od-a" x1="6" y1="26" x2="42" y2="10" gradientUnits="userSpaceOnUse"> <stop offset="0" stop-color="#0364B8"/> <stop offset=".5" stop-color="#0F78D4"/> <stop offset="1" stop-color="#28A8EA"/> </linearGradient> </defs> <g fill="url(#od-a)"> <circle cx="30.5" cy="16" r="10.5"/> <circle cx="19" cy="12.5" r="9"/> <circle cx="9.5" cy="19.5" r="6.5"/> <rect x="3" y="19" rx="3.75"/> </g> </svg></span>
+      </div>
+    </div>
+    <div class="screen"><div class="page">
+      <div class="lp-top"><span class="lp-h">Meetings</span><span class="lp-day">&lsaquo;<b>Today</b><i>10 Sep</i>&#8964;&rsaquo;</span><span class="chip">+ New meeting</span></div>
+      <div class="askbar"><span class="askbar-plus"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5.5v13M5.5 12h13"/></svg></span><span class="askbar-ph">Ask about an upcoming or a previous meeting</span><span class="askbar-go"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5"/><path d="m5.5 11.5 6.5-6.5 6.5 6.5"/></svg></span></div>
+      <div class="sect">Past</div>
+        <div class="lp-row"><span class="lp-t"><b>15:20</b><i>30m</i></span><span class="lp-dot"></span><span class="lp-m"><span class="lp-n">Pipeline stand-up</span><span class="lp-w">Matt Rivera, John Whitaker and 7 others</span></span></div>
+        <div class="lp-row"><span class="lp-t"><b>16:15</b><i>12m</i></span><span class="lp-dot"></span><span class="lp-m"><span class="lp-n">Orion &mdash; pricing escalation</span><span class="lp-w">Priya Raman, Dev Anand and you</span></span></div>
+        <div class="lp-row"><span class="lp-t"><b>17:20</b><i>45m</i></span><span class="lp-dot"></span><span class="lp-m"><span class="lp-n">Brightpath &mdash; phase two rollout</span><span class="lp-w">Callum Reid, Dev Anand and you</span></span></div>
+      <div class="sect" style="margin-top:18px">Upcoming</div>
+      <div class="lp-card"><div class="lp-row"><span class="lp-t"><b>18:35</b><i>1h</i></span><span class="lp-dot"></span><span class="lp-m"><span class="lp-n">Halden &mdash; expansion pricing review <span class="lp-now">Now</span></span><span class="lp-w">Rachel Okafor, Owen Castillo and you</span></span><span class="pill">&#10022; Brief</span></div></div>
+        <div class="lp-row"><span class="lp-t"><b>20:10</b><i>30m</i></span><span class="lp-dot"></span><span class="lp-m"><span class="lp-n">Vantage &mdash; data residency follow-up</span><span class="lp-w">Meera Nair, Dev Anand and you</span></span><span class="pill">&#10022; Brief</span></div>
+    </div></div>
+  </section>
+
+  <section class="slide feat">
+    <div class="say">
+      <div class="eyebrow">02</div>
+      <h2>Meeting Briefs</h2>
+    </div>
+    <div class="screen"><div class="page">
+      <div class="top"><span class="back">&larr; Back</span><span class="chip">Share</span></div>
+      <h3 class="t">Halden &mdash; expansion pricing review</h3>
+      <div class="meta">Today &middot; 15:00 &ndash; 16:00 &middot; Rachel Okafor, Owen Castillo and you</div>
+      <div class="tabs"><span>My Notes</span><b>Brief</b></div>
+      <div class="strip"><span>Generated today at 08:10</span><span>Regenerate</span></div>
+      <div class="body">
+        <div class="par"><span class="nm">Owen</span> approved the structure on Friday and
+          <span class="nm">Rachel</span> has been waiting since Tuesday. Their board meets
+          Thursday, so this is the call where the numbers either land or the expansion moves
+          a quarter.</div>
+        <h4>Where it stands</h4>
+        <ul>
+          <li>$380k expansion, 120 seats on top of the 340 they already run.</li>
+          <li><span class="nm">Owen</span> signed off the discount floor on Friday &mdash; 22% at
+            36 months.</li>
+          <li>Nothing has gone to <span class="nm">Rachel</span> yet. She asked on Tuesday and
+            again on Friday.</li>
+        </ul>
+        <h4>What they will push on</h4>
+        <ul><li>A ramp. <span class="nm">Rachel</span> asked for one on the last expansion and
+          did not get it; expect it again.</li></ul>
+      </div>
+    </div></div>
+  </section>
+
+  <section class="slide feat">
+    <div class="say">
+      <div class="eyebrow">03</div>
+      <h2>People Insights</h2>
+    </div>
+    <div class="screen"><div class="pane">
+      <div class="main page">
+        <div class="top"><span class="back">&larr; Back</span><span class="chip">Share</span></div>
+        <h3 class="t">Halden &mdash; expansion pricing review</h3>
+        <div class="meta">Today &middot; 15:00 &ndash; 16:00 &middot; Rachel Okafor, Owen Castillo and you</div>
+        <div class="tabs"><span>My Notes</span><b>Brief</b></div>
+        <div class="body">
+          <div class="par"><span class="nm">Owen</span> approved the structure on Friday and
+            <span class="nm">Rachel</span> has been waiting since Tuesday. Their board meets
+            Thursday, so this is the call where the numbers either land or the expansion moves
+            a quarter.</div>
+          <h4>Where it stands</h4>
+          <ul>
+            <li>$380k expansion, 120 seats on top of the 340 they already run.</li>
+            <li><span class="nm">Owen</span> signed off the discount floor on Friday &mdash; 22%
+              at 36 months.</li>
+            <li>Nothing has gone to <span class="nm">Rachel</span> yet. She asked on Tuesday and
+              again on Friday.</li>
+          </ul>
+          <h4>What they will push on</h4>
+          <ul><li>A ramp. <span class="nm">Rachel</span> asked for one on the last expansion and
+            did not get it.</li></ul>
+        </div>
+      </div>
+      <div class="side">
+        <div class="ph"><span>&lsaquo;</span><b style="font-weight:600">Rachel Okafor</b>
+          <span style="color:var(--p-faint)">&middot; 3 Invitees &#8964;</span>
+        </div>
+        <div class="pbody">
+          <div class="pname">Rachel Okafor<span class="tag">External</span></div>
+          <div class="prole">VP Operations &middot; Halden</div>
+          <div class="lines">
+            <div class="ln"><span>Email</span><span><u>rachel.okafor@halden.com</u></span></div>
+            <div class="ln"><span>Phone</span><span><u>+1 614 555 0142</u></span></div>
+            <div class="ln"><span>LinkedIn</span><span><u>linkedin.com/in/rachel-okafor</u></span></div>
+            <div class="ln"><span>Location</span><span>Delaware, Ohio &middot; ET</span></div>
+          </div>
+          <div class="body">
+            <h4>Who they are</h4>
+            <ul style="gap:8px">
+              <li style="font-size:14.6px">Runs operations for the packaging division &mdash;
+                about 1,400 people across eleven plants. Owns the seat count.</li>
+              <li style="font-size:14.6px">Eleven years at <u>Halden</u>, the last three in this
+                role. Came up through the floor rather than through IT.</li>
+              <li style="font-size:14.6px">Reports to <u>Dev Anand</u>, the COO, who signs
+                anything above $250k.</li>
+            </ul>
+            <h4>With us</h4>
+            <ul style="gap:8px">
+              <li style="font-size:14.6px">Sponsored the first 340 seats in 2023 and ran the
+                rollout herself across four plants.</li>
+              <li style="font-size:14.6px">Asked for a ramp on that expansion and did not get
+                one. She has raised it twice since.</li>
+              <li style="font-size:14.6px">Last spoke on 2 September about the March incident.
+                She wanted the postmortem, and got it.</li>
+            </ul>
+          </div>
+        </div>
+        <div class="askbox"><div><span>+</span><span>Ask anything about Rachel</span></div></div>
+      </div>
+    </div></div>
+  </section>
+
+  <section class="slide feat">
+    <div class="say">
+      <div class="eyebrow">04</div>
+      <h2>Proactive Artefacts</h2>
+    </div>
+    <div class="screen"><div class="page">
+      <div class="top"><span class="back">&larr; Back</span><span class="chip">Share</span></div>
+      <h3 class="t">Vantage &mdash; data residency follow-up</h3>
+      <div class="meta">Today &middot; 16:30 &ndash; 17:00 &middot; Meera Nair, Dev Anand and you</div>
+      <div class="tabs"><span>My Notes</span><b>Brief</b></div>
+      <div class="body">
+        <div class="par"><span class="nm">Meera</span> asked two questions on the QBR on the 28th
+          and you said you would come back within the week. It is nine days.</div>
+        <h4>Prepared for you</h4>
+      </div>
+      <div class="rows">
+        <div class="row"><span class="ic" style="background:#2B579A">W</span>
+          <div><div class="n">Data residency</div><div class="w">Meera asked for this on the QBR
+            on 28 August &mdash; region, providers and retention on one page.</div></div></div>
+        <div class="row"><span class="ic" style="background:#C43E1C">P</span>
+          <div><div class="n">Residency walkthrough</div><div class="w">Meera needs something to
+            put in front of her own customers. Six slides, no notes to write.</div></div></div>
+        <div class="row"><span class="ic" style="background:#2B579A">W</span>
+          <div><div class="n">Sub-processors</div><div class="w">Vantage&rsquo;s security team asked
+            for the provider list in Meera&rsquo;s email on 2 September.</div></div></div>
+      </div>
+    </div></div>
+  </section>
+
+  <section class="slide feat">
+    <div class="say">
+      <div class="eyebrow">05</div>
+      <h2>Cues</h2>
+    </div>
+    <div class="screen"><div class="pane">
+      <div class="main page">
+        <div class="top"><span class="back">&larr; Back</span><span class="chip">Share</span></div>
+        <h3 class="t">Halden &mdash; expansion pricing review</h3>
+        <div class="meta">Today &middot; 15:00 &ndash; 16:00 &middot; Rachel Okafor, Owen Castillo and you</div>
+        <div class="tabs"><span>My Notes</span><b>Brief</b></div>
+        <div class="body">
+          <div class="par">Their board meets Thursday, so this is the call where the numbers
+            either land or the expansion moves a quarter.</div>
+          <h4>Where it stands</h4>
+          <ul>
+            <li>$380k expansion, 120 seats on top of the 340 they already run.</li>
+            <li>Discount floor signed off on Friday &mdash; 22% at 36 months.</li>
+            <li>Nothing has gone to <span class="nm">Rachel</span> yet.</li>
+          </ul>
+          <h4>What they will push on</h4>
+          <ul>
+            <li>A ramp, and the March incident. Both came up on the last call.</li>
+          </ul>
+        </div>
+      </div>
+      <div class="side">
+        <div class="ph"><div class="deckt"><span>Ask</span><span>Meeting</span><b>Cues</b></div>
+          <span class="sp"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M8 4.5v15M8 4.5 4.6 8M8 4.5 11.4 8"/><path d="M16 19.5v-15M16 19.5 12.6 16M16 19.5 19.4 16"/></svg></span></div>
+        <div style="padding:14px 18px">
+          <div class="sect">Answers</div>
+          <div class="cue"><span class="dot" style="background:var(--p-red)">!</span>
+            <div style="flex:1">
+              <div class="who"><span style="color:var(--p-ink);font-weight:550">Rachel Okafor</span><span>04:12</span></div>
+              <div class="q">&ldquo;Didn&rsquo;t you have an outage in March?&rdquo;</div>
+              <div class="ans">One P2 on 14 March &mdash; 41 minutes, no data loss, and your team
+                had the postmortem the same week.</div>
+              <div class="foot"><span class="quiet">Dismiss</span><span class="pill">Open in chat</span></div>
+            </div></div>
+          <div class="sect">Questions</div>
+          <div class="cue"><span class="dot" style="background:var(--p-green)">+</span>
+            <div style="flex:1">
+              <div class="who"><span style="color:var(--p-ink);font-weight:550">Deal desk</span><span>18:41</span></div>
+              <div class="q">&ldquo;Can you send us the SOC 2 report?&rdquo;</div>
+              <div class="foot"><span class="quiet">Dismiss</span><span class="pill">&#10022; Run</span></div>
+            </div></div>
+        </div>
+      </div>
+    </div></div>
+  </section>
+
+  <section class="slide feat">
+    <div class="say">
+      <div class="eyebrow">06</div>
+      <h2>Speaker Diarisation</h2>
+    </div>
+    <div class="screen"><div class="page">
+      <div class="top"><span class="back">&larr; Back</span><span class="chip">Share</span></div>
+      <h3 class="t">Halden &mdash; expansion pricing review</h3>
+      <div class="meta">Today &middot; 15:00 &ndash; 16:00 &middot; Rachel Okafor, Owen Castillo and you</div>
+      <div class="tabs"><span>My Notes</span><span>Brief</span><b>Transcript</b><span>AI Summary</span></div>
+      <div class="strip"><span style="color:var(--p-green)">&#9679; Recording &middot; 04:31</span>
+        <span class="pill" style="height:27px">Label Speakers</span></div>
+      <div class="dim">
+        <div class="dlg">
+          <header class="dlg-h">
+            <div><h4 class="dlg-t">Whose voice was that?</h4>
+              <p class="dlg-s">Name each one and the transcript relabels itself.</p></div>
+          </header>
+          <div class="dlg-b">
+            <div class="spk-v">
+              <div class="spk-v-n">Speaker 1</div>
+              <div class="spk-refs">
+                <p class="spk-ref">&ldquo;The whole estate. Which is why four per cent is where
+                  we have landed. Anything above that and we are re-opening the business
+                  case.&rdquo;</p>
+                <p class="spk-ref">&ldquo;Then let us have the three-year figure alongside it. If
+                  holding at four costs us less over three years than a renegotiation, that is
+                  the paper our board needs.&rdquo;</p>
+              </div>
+              <div class="spk-field">Name this voice</div>
+            </div>
+            <div class="spk-v">
+              <div class="spk-v-n">Speaker 2</div>
+              <div class="spk-refs">
+                <p class="spk-ref">&ldquo;Understood. Before we get to the number &mdash; is this
+                  the whole estate or just the platform lines?&rdquo;</p>
+                <p class="spk-ref">&ldquo;Priya, is the indexation clause the 2023 one or the
+                  amended one?&rdquo;</p>
+              </div>
+              <div class="spk-field">Name this voice</div>
+            </div>
+            <div class="spk-v">
+              <div class="spk-v-n">Speaker 3</div>
+              <div class="spk-refs">
+                <p class="spk-ref">&ldquo;Four is below what the contract indexes to. I am not
+                  saying no, I am saying it needs a reason we can write down.&rdquo;</p>
+              </div>
+              <div class="spk-field">Name this voice</div>
+            </div>
+          </div>
+          <footer class="dlg-f">
+            <span class="btn">Cancel</span>
+            <span class="btn btn-off">Relabel transcript</span>
+          </footer>
+        </div>
+      </div>
+            <div style="margin-top:8px">
+        <div class="line"><div><div class="spk">Rachel Okafor</div><div class="tm">04:06</div></div>
+          <div class="said">Before we get to the number &mdash; is this the whole estate or just
+            the platform lines?</div></div>
+        <div class="line"><div><div class="spk">Owen Castillo</div><div class="tm">04:12</div></div>
+          <div class="said">The whole estate. Which is why four per cent is where we have
+            landed.</div></div>
+        <div class="line"><div><div class="spk">Speaker 3</div><div class="tm">04:31</div></div>
+          <div class="said">Four is below what the contract indexes to. I am not saying no, I am
+            saying it has to be defensible.</div></div>
+      </div>
+    </div></div>
+  </section>
+
+  <section class="slide feat">
+    <div class="say">
+      <div class="eyebrow">07</div>
+      <h2>Meeting Summaries</h2>
+    </div>
+    <div class="screen"><div class="page">
+      <div class="top"><span class="back">&larr; Back</span><span class="chip">Share</span></div>
+      <h3 class="t">Orion &mdash; pricing escalation</h3>
+      <div class="meta">Today &middot; 13:40 &ndash; 13:52 &middot; Priya Raman, Dev Anand and you</div>
+      <div class="tabs"><span>My Notes</span><span>Brief</span><span>Transcript</span><b>AI Summary</b></div>
+      <div class="strip"><span>&#10022; 2 min read</span><span>Regenerate</span></div>
+      <div class="body">
+        <div class="par">Orion called this at a day&rsquo;s notice to hold the FY26 uplift at
+          4%, ahead of a board meeting on Thursday. Twelve minutes, three people, and it ran to
+          the number rather than to the relationship.</div>
+        <h4>Where we landed</h4>
+        <ul>
+          <li>4% is below what the contract indexes to, and that was said plainly rather than
+            argued.</li>
+          <li>No number was given back. The position goes in writing, which keeps the
+            conversation with us until Thursday.</li>
+        </ul>
+        <h4>What is still open</h4>
+        <ul>
+          <li>Whether 4% is a ceiling or an opening. It softened the second time it was said.</li>
+          <li>Whether the whole estate is in scope, or only the platform lines. Asked twice,
+            answered once.</li>
+        </ul>
+        <h4>Worth knowing</h4>
+        <ul>
+          <li>They booked this at a day&rsquo;s notice, which is the strongest signal in the call
+            &mdash; the board date is doing the work.</li>
+          <li>Nobody from their finance side was on it. The number is being carried by the
+            sponsor, not defended by the people who own it.</li>
+        </ul>
+        <h4>Suggested Do Lists</h4>
+        <ul>
+          <li>Send the written position on the FY26 uplift.</li>
+          <li>Get the three-year figure from Deal desk before Thursday.</li>
+        </ul>
+      </div>
+    </div></div>
+  </section>
+
+  <section class="slide feat">
+    <div class="say">
+      <div class="eyebrow">08</div>
+      <h2>Suggested Do Lists</h2>
+    </div>
+    <div class="screen"><div class="page">
+      <div class="tabs" style="margin-top:0"><span>My Notes</span><span>Brief</span>
+        <span>Transcript</span><b>AI Summary</b></div>
+      <div class="body">
+        <div class="par" style="margin-top:18px">Halden came in to settle the 120-seat expansion
+          before their board meets on Thursday. The discount floor held at 22%, and the ramp came
+          up twice.</div>
+        <h4>Where we landed</h4>
+        <ul>
+          <li>120 seats on top of the 340 they run, at 22% on a 36-month term.</li>
+          <li>The written position goes over tonight, ahead of Thursday.</li>
+        </ul>
+        <h4>Worth knowing</h4>
+        <ul>
+          <li>They booked this at a day&rsquo;s notice, which is the strongest signal in the call
+            &mdash; the board date is doing the work here.</li>
+          <li>Nobody from their finance side was on it. The number is being carried by the
+            sponsor, not defended by the people who own it.</li>
+        </ul>
+        <h4>Suggested Do Lists</h4>
+      </div>
+      <div class="todo">
+        <div><span class="box on">&#10003;</span><span class="struck">Send the written position
+          on the FY26 uplift</span></div>
+        <div><span class="box"></span><span style="flex:1">Get the three-year figure from
+          Deal desk</span><span class="pill" style="height:28px">+ Add to Do List</span></div>
+        <div><span class="box"></span><span>Ask whether their board sees the position or a
+          summary</span></div>
+        <div><span class="box"></span><span>Confirm whether the whole estate is in scope</span></div>
+      </div>
+    </div></div>
+  </section>
+
+  <section class="slide feat">
+    <div class="say">
+      <div class="eyebrow">09</div>
+      <h2>Templates</h2>
+    </div>
+    <div class="screen"><div class="page">
+      <div class="top"><span class="back">&larr; Back</span><span class="chip">Share</span></div>
+      <h3 class="t">1:1 with Sana</h3>
+      <div class="meta">Today &middot; 17:30 &ndash; 17:55 &middot; Sana Iqbal and you</div>
+      <div class="tabs"><b>My Notes</b><span>Brief</span></div>
+      <div class="body"><div class="par" style="color:var(--p-faint)">Write notes, or press / to
+        start with a template</div></div>
+      <div class="tsplit">
+        <div class="menu" style="margin-top:14px">
+          <div class="hd">Templates</div>
+          <div class="on">Customer: Discovery</div>
+          <div>Customer: Existing</div>
+          <div>Product demo</div>
+          <div>Quarterly business review</div>
+          <div>One-on-one</div>
+          <div>Retrospective</div>
+          <div>Interview</div>
+          <div style="color:var(--p-soft)">Write your own&hellip;</div>
+        </div>
+        <div class="tprev">
+          <div class="sect">On the page</div>
+          <div class="body" style="margin-top:2px">
+            <h4>Where they are today</h4>
+            <ul><li class="ghost">Systems in use, and who owns them</li>
+              <li class="ghost">What broke last quarter</li></ul>
+            <h4>What they are trying to fix</h4>
+            <ul><li class="ghost">The problem in their words</li>
+              <li class="ghost">What it costs them now</li></ul>
+            <h4>Who decides</h4>
+            <ul><li class="ghost">Budget owner, and when the budget lands</li></ul>
+            <h4>Next steps</h4>
+            <ul><li class="ghost">What we send, and by when</li></ul>
+          </div>
+        </div>
+      </div>
+    </div></div>
+  </section>
+
+  <section class="slide feat">
+    <div class="say">
+      <div class="eyebrow">10</div>
+      <h2>Native Recording</h2>
+    </div>
+    <div class="screen plain"><div class="desk">
+      <div class="win">
+        <div class="bar"><i></i><i></i><i></i></div>
+        <div class="page" style="padding:22px 26px">
+          <h3 class="t" style="font-size:26px">Halden &mdash; expansion pricing review</h3>
+          <div class="meta" style="font-size:13.5px">Today &middot; 15:00 &ndash; 16:00 &middot;
+            Rachel Okafor, Owen Castillo and you</div>
+          <div class="tabs" style="margin-top:20px; font-size:14px"><span>My Notes</span>
+            <span>Brief</span><b>Transcript</b></div>
+          <div style="margin-top:12px">
+            <div class="line" style="grid-template-columns:130px 1fr; padding:10px 0">
+              <div><div class="spk" style="font-size:13px">Rachel Okafor</div>
+                <div class="tm" style="font-size:11.6px">04:06</div></div>
+              <div class="said" style="font-size:13.8px">Before we get to the number &mdash; is
+                this the whole estate?</div></div>
+            <div class="line" style="grid-template-columns:130px 1fr; padding:10px 0">
+              <div><div class="spk" style="font-size:13px">Owen Castillo</div>
+                <div class="tm" style="font-size:11.6px">04:12</div></div>
+              <div class="said" style="font-size:13.8px">The whole estate. Which is why four per
+                cent is where we landed.</div></div>
+            <div class="line" style="grid-template-columns:130px 1fr; padding:10px 0">
+              <div><div class="spk" style="font-size:13px">Speaker 3</div>
+                <div class="tm" style="font-size:11.6px">04:31</div></div>
+              <div class="said" style="font-size:13.8px">Four is below what the contract indexes
+                to. I am not saying no.</div></div>
+          </div>
+        </div>
+      </div>
+      <div class="capsule">
+        <div class="eq"><b style="height:6px"></b><b style="height:12px"></b><b style="height:8px"></b></div>
+        <div class="stop"><i></i></div>
+      </div>
+    </div></div>
+  </section>
+
+
+  <section class="slide feat">
+    <div class="say">
+      <div class="eyebrow">11</div>
+      <h2>Multiplayer</h2>
+    </div>
+    <div class="screen"><div class="page">
+      <div class="top"><span class="back">&larr; Back</span>
+        <span style="display:flex; align-items:center; gap:12px">
+          <span class="faces">
+            <span class="face" style="background:#2F6FEB">RO</span>
+            <span class="face" style="background:#C4783A">OC</span>
+            <span class="face" style="background:#5B8C6E">RB</span>
+          </span>
+          <span class="chip">Share</span></span></div>
+      <h3 class="t">Halden &mdash; expansion pricing review</h3>
+      <div class="meta">Today &middot; 15:00 &ndash; 16:00 &middot; Rachel Okafor, Owen Castillo and you</div>
+      <div class="tabs"><span>My Notes</span><span>Brief</span><span>Transcript</span><b>AI Summary</b></div>
+      <div class="strip"><span>&#10022; Written at 16:02</span><span>3 people here</span></div>
+      <div class="body">
+        <div class="par">Halden came in to settle the 120-seat expansion before their board meets
+          on Thursday. <span class="sel sel-b">The discount floor held at 22%</span><span
+          class="cur cur-b"><b>Rachel Okafor</b></span>, and the ramp came up twice.</div>
+        <h4>Where we landed</h4>
+        <ul>
+          <li>120 seats on top of the 340 they run, at 22% on a 36-month term.</li>
+          <li>The ramp was asked for again. Nothing was promised in the room<span
+            class="cur cur-o"><b>Owen Castillo</b></span></li>
+          <li>The written position goes over tonight, ahead of Thursday.</li>
+        </ul>
+        <h4>What is still open</h4>
+        <ul>
+          <li><span class="sel sel-o">Whether a three-month ramp is on the table at all.</span>
+            Deal desk has not been asked.</li>
+        </ul>
+      </div>
+      <div class="cnote">
+        <span class="face" style="background:#C4783A">OC</span>
+        <div><div class="cn-n">Owen Castillo <span>now</span></div>
+          <div class="cn-t">I can get the ramp signed off if we hold 36 months.</div></div>
+      </div>
+    </div></div>
+  </section>
+
+  <section class="slide journey">
+    <h2>Summary.</h2>
+    <div class="stages">
+      <div class="stage">
+        <div class="when"><b>Before</b></div>
+        <dl class="pairs">
+          <div><dt>Meeting briefs</dt><dd>You know what the call is about before it starts.</dd></div>
+          <div><dt>People insights</dt><dd>You know who you&rsquo;re talking to.</dd></div>
+          <div><dt>Proactive artefacts</dt><dd>You turn up with the thing they asked for.</dd></div>
+        </dl>
+      </div>
+      <div class="stage">
+        <div class="when"><b>During</b></div>
+        <dl class="pairs">
+          <div><dt>Speaker diarisation</dt><dd>You can pay attention instead of typing.</dd></div>
+          <div><dt>Cues</dt><dd>You answer the hard question there and then.</dd></div>
+          <div><dt>Ask anything</dt><dd>The account is one question away, mid-call.</dd></div>
+          <div><dt>Native recording</dt><dd>Nothing joins the call to record it.</dd></div>
+        </dl>
+      </div>
+      <div class="stage">
+        <div class="when"><b>After</b></div>
+        <dl class="pairs">
+          <div><dt>Meeting summaries</dt><dd>The write-up is done before you get up.</dd></div>
+          <div><dt>Templates</dt><dd>Everyone&rsquo;s meetings read the same way.</dd></div>
+          <div><dt>Suggested do lists</dt><dd>You don&rsquo;t drop what you said you&rsquo;d do.</dd></div>
+          <div><dt>Multiplayer</dt><dd>Everyone reads the same page, not a forward.</dd></div>
+        </dl>
+      </div>
+    </div>
+  </section>
+
+  <section class="slide divider">
+    <div>
+      <h2>AI&nbsp;Meetings</h2>
+    </div>
+  </section>
+
+</div>
+
+<div class="rail"><i id="bar"></i></div>
+<div class="count" id="count">01</div>
+<div class="hint">&larr; &rarr; to move</div>
+<div class="nav">
+  <button id="prev" aria-label="Previous slide"></button>
+  <button id="next" aria-label="Next slide"></button>
+</div>
+
+<script>
+  const slides = [...document.querySelectorAll('.slide')];
+  const bar = document.getElementById('bar');
+  const count = document.getElementById('count');
+  let at = 0;
+  const show = (n) => {
+    at = Math.max(0, Math.min(slides.length - 1, n));
+    slides.forEach((s, i) => s.dataset.on = String(i === at));
+    bar.style.width = ((at + 1) / slides.length * 100) + '%';
+    count.textContent = String(at + 1).padStart(2, '0') + ' / ' + String(slides.length).padStart(2, '0');
+  };
+  document.getElementById('next').onclick = () => show(at + 1);
+  document.getElementById('prev').onclick = () => show(at - 1);
+  addEventListener('keydown', (e) => {
+    if (e.key === 'ArrowRight' || e.key === ' ' || e.key === 'PageDown') { e.preventDefault(); show(at + 1); }
+    if (e.key === 'ArrowLeft' || e.key === 'PageUp') { e.preventDefault(); show(at - 1); }
+    if (e.key === 'Home') show(0);
+    if (e.key === 'End') show(slides.length - 1);
+  });
+  show(0);
+</script>
