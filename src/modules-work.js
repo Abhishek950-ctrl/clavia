@@ -932,6 +932,12 @@ function mxSign(r) {
   }
   for (const x of sg.approvals) if (!x.manual && !rules.some(rule => rule.role === x.role)) x.gone = true;
   delete sg.seed;
+  /* 21 Oct demo: Grace has asked for approvals on the Gulf Systems NDA, so it waits on Roger too */
+  if (r.id === 'RQ-1050' && !r.apDemo) {
+    r.apDemo = 1; const at = new Date(Date.now() - 864e5).toISOString();
+    sg.requested ||= { v: (mxDocuments(r)[0]?.versions.length || 1), at };
+    sg.approvals.forEach(x => { if (x.state === 'not') { x.state = 'pending'; x.asked = at; } });
+  }
   return sg;
 }
 const mxApOk = (x) => x.state === 'approved';
@@ -1855,7 +1861,9 @@ function intakePage(r, opts = {}) {
   const hasTerms = false;   // Key Terms is built but not shown for now
   const hasSign = SHOW_APPROVALS && !!mxSign(r);
   const hasIssues = SHOW_ISSUES && !!mxIssues(r);
-  let tab = MX.intake.tab && ['summary', 'details', 'terms', 'sign', 'team', 'activity', 'docs', 'issues', 'comments'].includes(MX.intake.tab) ? MX.intake.tab : 'summary';
+  let tab = MX.intake.tab && ['summary', 'details', 'terms', 'sign', 'signing', 'team', 'activity', 'docs', 'issues', 'comments'].includes(MX.intake.tab) ? MX.intake.tab : 'summary';
+  /* waiting on your approval: it opens on the Overview, where the approval is */
+  if (mxAwaitsMe(r)) tab = 'summary';
   /* the document whose round is open in the Documents tab, if any */
   let reviewing = MX.intake.review || null; MX.intake.review = null;
   if ((tab === 'terms' && !hasTerms) || (tab === 'sign' && !(hasSign && INTAKE_FX.approvals)) || (tab === 'issues' && !hasIssues) || (tab === 'signing' && !mxEnvelopes(r).length)) tab = 'summary';
@@ -1939,7 +1947,7 @@ function intakePage(r, opts = {}) {
     };
     if (reading) return [aiBox(h('p', { class: 'rqp-ai-t rqp-ai-wait' }, 'Reading the request…'))];
     const s = mxSummary(r);
-    return [aiBox(h('div', { class: 'rqp-ai-t' }, h('p', { class: 'rqp-ai-intro' }, s.intro),
+    return [...approvalPanel(), aiBox(h('div', { class: 'rqp-ai-t' }, h('p', { class: 'rqp-ai-intro' }, s.intro),
       h('ul', { class: 'rqp-ai-pts' }, ...s.points.map(([k, t]) => h('li', {}, h('b', {}, k), ' ', t))))), recentDocs(), recent()].filter(Boolean);   /* comments live in their own tab, not on the Overview */
   };
 
@@ -2283,6 +2291,49 @@ function intakePage(r, opts = {}) {
      path of marks. A row says who, why they are on it, where it stands;
      the one thing to do next (Approve, Remind, Sign) sits on the row, the
      rest in its ⋯. The section's own actions sit in its heading. */
+  /* ── your approval, at the top of the Overview ──
+     What you are asked to approve and why the rule puts it to you, the terms that matter to
+     your part, and the document it is on. Approve, ask for changes, or pass it on. An approval
+     given on an earlier version that has since changed your terms comes back here, saying what changed. */
+  const approvalPanel = () => {
+    const sg = mxSign(r); if (!sg) return [];
+    const mine = sg.approvals.filter(x => !x.gone && x.who === USER.name && ['pending', 'stale'].includes(mxApNow(r, x).k));
+    const d1 = docs.find(x => x.id === 'd1') || docs[0], mainV = d1 ? d1.versions.length : 0;
+    const ago = (iso) => { const n = Math.floor((Date.now() - new Date(iso)) / 864e5); return n <= 0 ? 'today' : n === 1 ? 'yesterday' : `${n} days ago`; };
+    const card = (x) => {
+      const now = mxApNow(r, x), b = mxApprovalBrief(r, x.role);
+      const note = h('textarea', { class: 'mx-rqf-in mx-rqf-ta rqap-note', rows: '2', placeholder: 'What needs to change, for ' + (r.attorney || 'legal').split(' ')[0] });
+      const noteRow = h('div', { class: 'rqap-changes', hidden: true }, note,
+        h('div', { class: 'rqap-changes-b' }, h('button', { class: 'pb-btn', type: 'button', onclick: () => { noteRow.hidden = true; acts.hidden = false; } }, 'Cancel'),
+          h('button', { class: 'pb-btn pb-btn--primary', type: 'button', onclick: () => {
+            const t = note.value.trim(); if (!t) { note.focus(); note.placeholder = 'Say what needs to change'; return; }
+            const was = JSON.stringify(x); x.state = 'changes'; x.note = t; x.at = mxNow();
+            mxLog(r, { ev: 'status', what: `asked for changes as ${x.role}: “${t}”` }); afterApproval();
+            pbToast(`Sent to ${r.attorney || 'legal'}`, { label: 'Undo', run: () => { Object.assign(x, JSON.parse(was)); r.activity.pop(); save(); afterApproval(); } }); } }, 'Send')));
+      const passBtn = h('button', { class: 'pb-btn', type: 'button' }, 'Pass to someone else');
+      passBtn.onclick = (e) => { e.stopPropagation(); mxPersonPicker(passBtn, [...MX_LEGAL, ...MX_STAFF].filter(p => p.name !== USER.name), (p) => {
+        const was = JSON.stringify(x); x.who = p.name; x.manualWho = true;
+        mxLog(r, { ev: 'assign', what: `passed the ${x.role} approval to ${p.name}` }); afterApproval();
+        pbToast(`${p.name} will approve instead`, { label: 'Undo', run: () => { Object.assign(x, JSON.parse(was)); r.activity.pop(); save(); afterApproval(); } }); }); };
+      const acts = h('div', { class: 'rqap-acts' }, passBtn,
+        h('button', { class: 'pb-btn', type: 'button', onclick: () => { acts.hidden = true; noteRow.hidden = false; note.focus(); } }, 'Request changes'),
+        h('button', { class: 'pb-btn pb-btn--primary', type: 'button', onclick: () => {
+          const was = JSON.stringify(x); x.state = 'approved'; x.at = mxNow(); x.onV = mainV; x.by = [USER.name]; x.note = null;
+          mxLog(r, { ev: 'status', what: `approved this as ${x.role}${d1 ? `, on v${mainV}` : ''}` }); afterApproval();
+          pbToast(`Approved as ${x.role}`, { label: 'Undo', run: () => { Object.assign(x, JSON.parse(was)); r.activity.pop(); save(); afterApproval(); } }); } }, 'Approve'));
+      return h('section', { class: 'rqap' + (now.k === 'stale' ? ' is-stale' : '') },
+        h('header', { class: 'rqap-h' }, h('span', { class: 'rqap-tag' }, now.k === 'stale' ? 'Approve again' : 'Waiting on your approval'),
+          h('span', { class: 'rqap-role' }, x.role), h('span', { class: 'pb-grow' }),
+          h('span', { class: 'rqap-when' }, `Asked ${ago(x.asked || sg.requested?.at || r.updated)}${r.attorney && r.attorney !== USER.name ? ` by ${r.attorney}` : ''}`)),
+        h('p', { class: 'rqap-why' }, x.why),
+        now.k === 'stale' ? h('p', { class: 'rqap-stale' }, `You approved v${x.onV}. v${mainV} changed ${now.changed?.length ? now.changed.join(', ') : 'terms you look at'}.`) : null,
+        h('dl', { class: 'rqap-dl' }, ...b.lines.flatMap(([k, v]) => [h('dt', {}, k), h('dd', {}, v)])),
+        d1 ? h('button', { class: 'rqap-doc', type: 'button', onclick: () => { openRef({ doc: d1.id }); } }, mxTile('file', mxExt(d1.title)), h('span', {}, `${shortOf(d1)} · v${mainV}`), h('span', { class: 'rqap-doc-o' }, 'Open')) : null,
+        acts, noteRow);
+    };
+    return mine.map(card);
+  };
+  const afterApproval = () => { save(); paintBody(); };
   /* everything on the page that reads the signing, painted again after any change to it */
   const afterSign = () => { paintSteps(); stageBtn._paint?.(); paintSig(); paintTabs(); paintDoc(); paintBody(); };
   /* a small form in a dialog: the fields, then one action */
@@ -3530,7 +3581,8 @@ function intakePage(r, opts = {}) {
         const rd = mxRoundOf(r, d.id), q = rd && !rd.answered ? (rd.points || []).filter(p => !p.decision).length : 0;
         return c || q ? [{ n: shortOf(d), t: [c && mxPlural(c, 'open comment'), q && `${q} of their changes to answer`].filter(Boolean).join(' · ') }] : [];
       });
-      const wait = INTAKE_FX.approvals ? mxSignWaiting(r) : [];
+      /* approvals asked for and not all in: say so before anything goes out */
+      const wait = mxSign(r)?.requested ? mxSignWaiting(r) : [];
       const askLoose = () => loose.length ? pbConfirm({ title: 'Some of this is still open', lead: `Signers sign exactly what is sent. ${loose.length === 1 ? 'This document has' : 'These documents have'} open points.`,
         items: loose, action: 'Send anyway', run: go }) : go();
       if (wait.length) pbConfirm({ title: 'Approvals are still waiting', lead: `${r.id} should go for signature once ${wait.length === 1 ? 'this is' : 'these are'} in.`,
@@ -4459,7 +4511,7 @@ function intakeView() {
     { k: 'unassigned', label: 'Unassigned', in: (r) => isOpen(r) && !r.attorney && !r.resolvedBy },
     { k: 'mine', label: 'Assigned to Me', in: (r) => isOpen(r) && r.attorney === USER.name },
     ...(INTAKE_FX.following ? [{ k: 'following', label: 'Following', in: (r) => isOpen(r) && !!r.followed && r.attorney !== USER.name }] : []),
-    { k: 'approve', label: 'Needs My Approval', in: (r) => isOpen(r) && mxAwaitsMe(r) }];
+    { k: 'approve', label: 'My Approvals', in: (r) => isOpen(r) && mxAwaitsMe(r) }];
   if (!st.viewV) { if (st.tab === 'all') st.tab = 'open'; st.viewV = 1; }
   const everything = () => list;
   const TABOF = (r) => !r.attorney && !r.resolvedBy ? 'unassigned' : r.attorney === USER.name ? 'mine' : 'others';
@@ -4501,7 +4553,7 @@ function intakeView() {
       { key: 'counterparty', label: 'Counterparty' }, { key: 'type', label: 'Type' }, { key: 'submitter', label: 'Submitter' },
       { key: 'attorney', label: 'Attorney' }, ...(INTAKE_FX.dueCol ? [{ key: 'due', label: 'Due' }] : []), { key: 'stage', label: 'Stage' }, { key: 'comments', label: 'Comments' }],
     /* the two questions a head of legal asks of this list */
-    tabs: TABS, tabOf: TABOF,
+    tabs: TABS, tabOf: TABOF, pinned: 'approve',
     /* the critical fields as dropdowns in place of tabs (INTAKE_FX.drops) */
     drops: INTAKE_FX.drops ? ['stage', 'attorney', 'submitter', 'source', 'due'] : null,
     items: everything,
