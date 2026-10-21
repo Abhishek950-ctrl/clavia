@@ -421,6 +421,15 @@ function mxIntake() {
     d.slackV = 1; save(); }
   /* the seeded requests a routing rule placed say so */
   if (INTAKE_FX.rules && d.rulesV !== 2 && typeof mxRulesSeedStory === 'function') { mxRulesSeedStory(d.intake); d.rulesV = 2; save(); }
+  /* 21 Oct: two documents waiting for approval, one of them on Roger */
+  if (d.apDocV !== 1) {
+    const seed = (id, approvedBy) => { const r = d.intake.find(q => q.id === id); if (!r) return; const doc = mxDocuments(r)[0]; const v = doc?.versions[doc.versions.length - 1]; if (!v) return;
+      v.ap = { state: 'pending', asked: new Date(Date.now() - 864e5).toISOString(), steps: [
+        { who: approvedBy, role: 'Assigned lawyer', state: 'approved', at: new Date(Date.now() - 6e7).toISOString(), note: null },
+        { who: 'Roger Bennett', role: 'General Counsel', state: 'pending', at: null, note: null }] }; };
+    seed('RQ-1049', 'Elena Petrova'); seed('RQ-1050', 'Grace Coleman');
+    d.apDocV = 1; save();
+  }
   return d.intake;
 }
 
@@ -932,12 +941,6 @@ function mxSign(r) {
   }
   for (const x of sg.approvals) if (!x.manual && !rules.some(rule => rule.role === x.role)) x.gone = true;
   delete sg.seed;
-  /* 21 Oct demo: Grace has asked for approvals on the Gulf Systems NDA, so it waits on Roger too */
-  if (r.id === 'RQ-1050' && !r.apDemo) {
-    r.apDemo = 1; const at = new Date(Date.now() - 864e5).toISOString();
-    sg.requested ||= { v: (mxDocuments(r)[0]?.versions.length || 1), at };
-    sg.approvals.forEach(x => { if (x.state === 'not') { x.state = 'pending'; x.asked = at; } });
-  }
   return sg;
 }
 const mxApOk = (x) => x.state === 'approved';
@@ -958,10 +961,7 @@ function mxSignWaiting(r) {
   return sg.approvals.filter(x => !x.gone && mxApNow(r, x).k !== 'approved').map(x => ({ who: x.who || `Any one of ${x.team}`, what: x.role }));
 }
 /* is this request waiting on my yes: an approval asked of me by name */
-function mxAwaitsMe(r) {
-  const sg = mxSign(r); if (!sg || !sg.requested) return false;
-  return sg.approvals.some(x => !x.gone && x.who === USER.name && ['pending', 'stale'].includes(mxApNow(r, x).k));
-}
+function mxAwaitsMe(r) { return mxApMine(r).length > 0; }
 /* what an approver needs to say yes without opening the contract: the deal in one line, and the
    few terms that matter to their step, each as it now stands */
 function mxApprovalBrief(r, step, point) {
@@ -1503,9 +1503,63 @@ function mxAddVersion(r, v, docId) {
   const d = docId && docs.find(x => x.id === docId);
   if (d) d.versions.push(v);
   else docs.push({ id: pbUid('doc'), title: v.file || v.name, versions: [v] });
+  const nd = d || docs[docs.length - 1];
+  /* a new version of our paper waits for its approvals before it goes anywhere */
+  mxApAsk(r, nd, v);
   r.updated = mxNow(); save();
-  return d || docs[docs.length - 1];
+  return nd;
 }
+
+/* ── document approvals (21 Oct) ──────────────────────────────
+   Approval belongs to a version of a document, not to the request. When
+   approvals are on, every new version (an upload, a draft from a
+   template, an edit in place) waits for the people the rules in
+   Settings › Document approvals name. Until all of them approve, the
+   version can be read and worked on, but not emailed to the other side
+   or sent for signature. A version from before approvals, or with none
+   needed, counts as approved. */
+const MX_AP_RULES_DEFAULT = [
+  { id: 'any', on: true, role: 'Assigned lawyer', when: 'Any change to a document', who: '@lawyer' },
+  { id: 'outside', on: true, role: 'General Counsel', when: 'Its terms go outside the playbook', who: 'Roger Bennett' },
+  { id: 'value', on: true, role: 'Finance', when: 'The deal is over £250,000', who: 'Sarah Lin' },
+  { id: 'dpa', on: true, role: 'Privacy', when: 'The document is a data processing agreement', who: 'Aisha Rahman' },
+];
+function mxApCfg() { const d = mxData(); d.apCfg ||= { on: true, rules: structuredClone(MX_AP_RULES_DEFAULT) }; return d.apCfg; }
+const mxApWho = (r, rule) => rule.who === '@lawyer' ? (r.attorney || 'Roger Bennett') : rule.who;
+function mxApFits(r, d, rule) {
+  if (rule.id === 'any') return true;
+  if (rule.id === 'outside') { const rd = typeof mxRoundOf === 'function' && mxRoundOf(r, d.id); return !!rd && (rd.points || []).some(p => p.playbook === 'outside' && (!p.decision || ['accept', 'signoff'].includes(p.decision.d))); }
+  if (rule.id === 'value') return (Number(String((MX_DEALS[r.deal] || {}).value || r.dealInfo?.value || '').replace(/[^\d]/g, '')) || 0) >= 250000;
+  if (rule.id === 'dpa') return d.source === 'dpa' || /data processing|\bdpa\b/i.test(d.title);
+  return false;
+}
+/* ask: one step per person, with every role the rules give them */
+function mxApAsk(r, d, v, quiet) {
+  const cfg = mxApCfg();
+  if (!cfg.on || !v || v.signedCopy || v.cmp || v.noAp) return;
+  const steps = [];
+  for (const rule of cfg.rules.filter(x => x.on && mxApFits(r, d, x))) {
+    const who = mxApWho(r, rule), have = steps.find(x => x.who === who);
+    if (have) have.role += ` · ${rule.role}`; else steps.push({ who, role: rule.role, state: 'pending', at: null, note: null });
+  }
+  if (!steps.length) { delete v.ap; return; }
+  v.ap = { state: 'pending', asked: mxNow(), steps };
+  if (!quiet) mxLog(r, { who: 'Clavia', ev: 'status', what: `asked ${steps.map(x => x.who).join(' and ')} to approve v${d.versions.indexOf(v) + 1} of ${d.title.replace(/\.\w+$/, '')}`, ref: { doc: d.id, v: d.versions.indexOf(v) + 1 } });
+}
+const mxVerOk = (v) => !v?.ap || v.ap.state === 'approved';
+/* the newest version that may go out: approved, not a comparison */
+function mxLatestOk(d) { for (let i = d.versions.length - 1; i >= 0; i--) if (mxVerOk(d.versions[i]) && !d.versions[i].cmp) return i; return -1; }
+function mxApDecide(r, d, v, step, ok, note) {
+  step.state = ok ? 'approved' : 'changes'; step.at = mxNow(); step.note = note || null;
+  const n = d.versions.indexOf(v) + 1, name = d.title.replace(/\.\w+$/, '');
+  mxLog(r, { ev: 'status', what: ok ? `approved v${n} of ${name}` : `asked for changes to v${n} of ${name}: “${note}”`, ref: { doc: d.id, v: n } });
+  if (!ok) v.ap.state = 'changes';
+  else if (v.ap.steps.every(x => x.state === 'approved')) { v.ap.state = 'approved'; mxLog(r, { who: 'Clavia', ev: 'status', what: `v${n} of ${name} is approved and can go out`, ref: { doc: d.id, v: n } }); }
+  save();
+}
+/* the versions waiting on you, across a request's documents */
+const mxApMine = (r) => mxDocuments(r).flatMap(d => d.versions.map((v, i) => ({ d, v, i })))
+  .filter(({ v }) => v.ap?.state === 'pending' && v.ap.steps.some(x => x.who === USER.name && x.state === 'pending'));
 
 /* ── signing, document by document (21 Oct) ───────────────────
    Every send is an envelope: some documents, each at the version sent,
@@ -1862,8 +1916,8 @@ function intakePage(r, opts = {}) {
   const hasSign = SHOW_APPROVALS && !!mxSign(r);
   const hasIssues = SHOW_ISSUES && !!mxIssues(r);
   let tab = MX.intake.tab && ['summary', 'details', 'terms', 'sign', 'signing', 'team', 'activity', 'docs', 'issues', 'comments'].includes(MX.intake.tab) ? MX.intake.tab : 'summary';
-  /* waiting on your approval: it opens on the Overview, where the approval is */
-  if (mxAwaitsMe(r)) tab = 'summary';
+  /* waiting on your approval: it opens on the Overview, with that document beside it */
+  if (mxAwaitsMe(r)) { tab = 'summary'; MX.intake.openDoc ||= mxApMine(r)[0].d.id; }
   /* the document whose round is open in the Documents tab, if any */
   let reviewing = MX.intake.review || null; MX.intake.review = null;
   if ((tab === 'terms' && !hasTerms) || (tab === 'sign' && !(hasSign && INTAKE_FX.approvals)) || (tab === 'issues' && !hasIssues) || (tab === 'signing' && !mxEnvelopes(r).length)) tab = 'summary';
@@ -2291,48 +2345,10 @@ function intakePage(r, opts = {}) {
      path of marks. A row says who, why they are on it, where it stands;
      the one thing to do next (Approve, Remind, Sign) sits on the row, the
      rest in its ⋯. The section's own actions sit in its heading. */
-  /* ── your approval, at the top of the Overview ──
-     What you are asked to approve and why the rule puts it to you, the terms that matter to
-     your part, and the document it is on. Approve, ask for changes, or pass it on. An approval
-     given on an earlier version that has since changed your terms comes back here, saying what changed. */
-  const approvalPanel = () => {
-    const sg = mxSign(r); if (!sg) return [];
-    const mine = sg.approvals.filter(x => !x.gone && x.who === USER.name && ['pending', 'stale'].includes(mxApNow(r, x).k));
-    const d1 = docs.find(x => x.id === 'd1') || docs[0], mainV = d1 ? d1.versions.length : 0;
-    const ago = (iso) => { const n = Math.floor((Date.now() - new Date(iso)) / 864e5); return n <= 0 ? 'today' : n === 1 ? 'yesterday' : `${n} days ago`; };
-    const card = (x) => {
-      const now = mxApNow(r, x), b = mxApprovalBrief(r, x.role);
-      const note = h('textarea', { class: 'mx-rqf-in mx-rqf-ta rqap-note', rows: '2', placeholder: 'What needs to change, for ' + (r.attorney || 'legal').split(' ')[0] });
-      const noteRow = h('div', { class: 'rqap-changes', hidden: true }, note,
-        h('div', { class: 'rqap-changes-b' }, h('button', { class: 'pb-btn', type: 'button', onclick: () => { noteRow.hidden = true; acts.hidden = false; } }, 'Cancel'),
-          h('button', { class: 'pb-btn pb-btn--primary', type: 'button', onclick: () => {
-            const t = note.value.trim(); if (!t) { note.focus(); note.placeholder = 'Say what needs to change'; return; }
-            const was = JSON.stringify(x); x.state = 'changes'; x.note = t; x.at = mxNow();
-            mxLog(r, { ev: 'status', what: `asked for changes as ${x.role}: “${t}”` }); afterApproval();
-            pbToast(`Sent to ${r.attorney || 'legal'}`, { label: 'Undo', run: () => { Object.assign(x, JSON.parse(was)); r.activity.pop(); save(); afterApproval(); } }); } }, 'Send')));
-      const passBtn = h('button', { class: 'pb-btn', type: 'button' }, 'Pass to someone else');
-      passBtn.onclick = (e) => { e.stopPropagation(); mxPersonPicker(passBtn, [...MX_LEGAL, ...MX_STAFF].filter(p => p.name !== USER.name), (p) => {
-        const was = JSON.stringify(x); x.who = p.name; x.manualWho = true;
-        mxLog(r, { ev: 'assign', what: `passed the ${x.role} approval to ${p.name}` }); afterApproval();
-        pbToast(`${p.name} will approve instead`, { label: 'Undo', run: () => { Object.assign(x, JSON.parse(was)); r.activity.pop(); save(); afterApproval(); } }); }); };
-      const acts = h('div', { class: 'rqap-acts' }, passBtn,
-        h('button', { class: 'pb-btn', type: 'button', onclick: () => { acts.hidden = true; noteRow.hidden = false; note.focus(); } }, 'Request changes'),
-        h('button', { class: 'pb-btn pb-btn--primary', type: 'button', onclick: () => {
-          const was = JSON.stringify(x); x.state = 'approved'; x.at = mxNow(); x.onV = mainV; x.by = [USER.name]; x.note = null;
-          mxLog(r, { ev: 'status', what: `approved this as ${x.role}${d1 ? `, on v${mainV}` : ''}` }); afterApproval();
-          pbToast(`Approved as ${x.role}`, { label: 'Undo', run: () => { Object.assign(x, JSON.parse(was)); r.activity.pop(); save(); afterApproval(); } }); } }, 'Approve'));
-      return h('section', { class: 'rqap' + (now.k === 'stale' ? ' is-stale' : '') },
-        h('header', { class: 'rqap-h' }, h('span', { class: 'rqap-tag' }, now.k === 'stale' ? 'Approve again' : 'Waiting on your approval'),
-          h('span', { class: 'rqap-role' }, x.role), h('span', { class: 'pb-grow' }),
-          h('span', { class: 'rqap-when' }, `Asked ${ago(x.asked || sg.requested?.at || r.updated)}${r.attorney && r.attorney !== USER.name ? ` by ${r.attorney}` : ''}`)),
-        h('p', { class: 'rqap-why' }, x.why),
-        now.k === 'stale' ? h('p', { class: 'rqap-stale' }, `You approved v${x.onV}. v${mainV} changed ${now.changed?.length ? now.changed.join(', ') : 'terms you look at'}.`) : null,
-        h('dl', { class: 'rqap-dl' }, ...b.lines.flatMap(([k, v]) => [h('dt', {}, k), h('dd', {}, v)])),
-        d1 ? h('button', { class: 'rqap-doc', type: 'button', onclick: () => { openRef({ doc: d1.id }); } }, mxTile('file', mxExt(d1.title)), h('span', {}, `${shortOf(d1)} · v${mainV}`), h('span', { class: 'rqap-doc-o' }, 'Open')) : null,
-        acts, noteRow);
-    };
-    return mine.map(card);
-  };
+  /* documents waiting on your approval: one line each at the top of the Overview; the approving happens beside the document */
+  const approvalPanel = () => mxApMine(r).map(({ d, v, i }) => h('button', { class: 'rqap-line', type: 'button', onclick: () => openRef({ doc: d.id, v: i + 1 }) },
+    h('span', { class: 'rqap-dot' }), h('span', { class: 'rqap-line-t' }, h('b', {}, `${shortOf(d)} v${i + 1}`), ' is waiting for your approval'),
+    h('span', { class: 'rqap-line-go' }, 'Review')));
   const afterApproval = () => { save(); paintBody(); };
   /* everything on the page that reads the signing, painted again after any change to it */
   const afterSign = () => { paintSteps(); stageBtn._paint?.(); paintSig(); paintTabs(); paintDoc(); paintBody(); };
@@ -2819,7 +2835,7 @@ function intakePage(r, opts = {}) {
         const canReview = !mxDocLocked(r, d) && !d.versions[shown].cmp && shown > 0 && !(mxRounds(r).docs[d.id] || []).some(x => x.v === shown + 1);
         listFrom(ver, [
           ...d.versions.map((v, k) => k).reverse().map(k => [k === shown, h('span', { class: 'rqp-ver-v' }, `v${k + 1}`), d.versions[k].name + (k === d.versions.length - 1 ? ' · Latest' : ''),
-            (() => { const n = (r.activity || []).filter(a => (a.kind === 'note' || a.kind === 'reply') && a.ref?.doc === d.id && a.ref?.v === k + 1).length; return `${pbWhen(d.versions[k].when)} · ${d.versions[k].by}${n ? ` · ${mxPlural(n, 'comment')}` : ''}`; })(),
+            (() => { const n = (r.activity || []).filter(a => (a.kind === 'note' || a.kind === 'reply') && a.ref?.doc === d.id && a.ref?.v === k + 1).length; return `${d.versions[k].ap && d.versions[k].ap.state !== 'approved' ? 'Awaiting approval · ' : ''}${pbWhen(d.versions[k].when)} · ${d.versions[k].by}${n ? ` · ${mxPlural(n, 'comment')}` : ''}`; })(),
             () => { openRef({ doc: d.id, v: k + 1 }); paintBody(); }]),
           h('div', { class: 'rqp-vers-rule' }),
           [false, h('span', { class: 'rqp-ver-add', html: ICON('<path d="M12 6v12M6 12h12"/>', 13) }), 'Upload a New Version', '', () => { openRef({ doc: d.id }); upload(false); }],
@@ -2842,7 +2858,9 @@ function intakePage(r, opts = {}) {
         ((cs) => cs.length ? h('button', { class: 'rqp-dc-cmt is-ic', type: 'button', 'data-tip': `${mxPlural(cs.length, 'open comment')}`,
           onclick: (e) => { e.stopPropagation(); openCmts(d.id); } },
           h('span', { class: 'rqp-dc-cmt-ic', html: MX_TAB_ICONS.comments }), String(cs.length)) : null)(mxWComments(r).filter(c => c.doc === d.id && c.status !== 'closed')),
-        /* where its signing stands */
+        /* where its approval and its signing stand */
+        ((v) => v?.ap && v.ap.state !== 'approved' ? h('span', { class: 'mx-sgc ' + (v.ap.state === 'changes' ? 'is-declined' : 'is-out'), 'data-tip': v.ap.steps.map(x => `${x.who}: ${x.state === 'approved' ? 'approved' : x.state === 'changes' ? 'asked for changes' : 'waiting'}`).join(' · ') },
+          v.ap.state === 'changes' ? 'Changes asked' : 'Awaiting approval') : null)(d.versions[d.versions.length - 1]),
         mxDocChip(r, d),
         /* the negotiation word ("With Brightwell", "3 to answer"), off 15 Oct: rows show only the comment count */
         ((rs) => DOC_ROUND_CHIP && rs ? h('button', { class: 'rqp-dc-round is-' + rs.k, type: 'button', 'data-tip': 'Open the round',
@@ -3109,6 +3127,26 @@ function intakePage(r, opts = {}) {
   const docBtn = h('button', { class: 'rqp-docsw', type: 'button', 'aria-haspopup': 'listbox' });
   const verBtn = h('button', { class: 'rqp-ver', type: 'button', 'aria-haspopup': 'listbox' });
   const banner = h('div', { class: 'rqp-old' });
+  /* the version's approval, across the top of it: who has approved, who it waits on, and for you, Approve */
+  const apBar = h('div', { class: 'rqp-apbar' });
+  const paintApBar = (d, v) => {
+    const ap = v?.ap; apBar.hidden = !ap || ap.state === 'approved';
+    if (apBar.hidden) return;
+    const n = d.versions.indexOf(v) + 1, me = ap.steps.find(x => x.who === USER.name && x.state === 'pending');
+    const chip = (x) => h('span', { class: 'rqp-apbar-p is-' + x.state, 'data-tip': `${x.role}${x.note ? ': “' + x.note + '”' : ''}` },
+      h('span', { class: 'rqp-apbar-m', html: x.state === 'approved' ? ICON('<path d="m6 12.5 4 4 8-8.5"/>', 11) : x.state === 'changes' ? ICON('<path d="M7 7l10 10M17 7 7 17"/>', 11) : '' }), x.who === USER.name ? 'You' : x.who);
+    const asker = ap.steps.find(x => x.state === 'changes');
+    apBar.className = 'rqp-apbar is-' + ap.state;
+    apBar.replaceChildren(
+      h('div', { class: 'rqp-apbar-t' },
+        h('b', {}, ap.state === 'changes' ? `Changes asked for on v${n}` : `v${n} needs approval`),
+        h('span', {}, ap.state === 'changes' ? ` · ${asker.who === USER.name ? 'You' : asker.who}: “${asker.note}” Edit it or upload a new version, and it goes for approval again.` : ' before it can be emailed or sent for signature.')),
+      h('div', { class: 'rqp-apbar-r' }, h('span', { class: 'rqp-apbar-ps' }, ...ap.steps.map(chip)),
+        me ? h('button', { class: 'rqp-sgbar-b', type: 'button', onclick: () => formDialog({ title: 'Ask for changes', lead: `${shortOf(d)} v${n}. ${r.attorney && r.attorney !== USER.name ? r.attorney.split(' ')[0] + ' gets' : 'The team gets'} your note.`,
+          fields: [{ k: 'note', label: 'What needs to change', long: true, need: true }], action: 'Send', run: (x) => { mxApDecide(r, d, v, me, false, x.note.trim()); afterSign(); pbToast('Changes asked for'); } }) }, 'Request changes') : null,
+        me ? h('button', { class: 'rqp-sgbar-b is-go', type: 'button', onclick: () => { mxApDecide(r, d, v, me, true); afterSign(); pbToast(v.ap.state === 'approved' ? `v${n} is approved` : 'Approved'); } }, 'Approve')
+          : ap.state === 'pending' ? h('button', { class: 'rqp-sgbar-b', type: 'button', onclick: () => { const w = ap.steps.filter(x => x.state === 'pending').map(x => x.who); mxLog(r, { ev: 'email', what: `reminded ${w.join(' and ')} to approve v${n}` }); pbToast(`Reminded ${w.join(' and ')}`); } }, 'Remind') : null));
+  };
   /* the document's signing, across the top of it: out, signed or declined, with what can be done */
   const signBar = h('div', { class: 'rqp-sgbar' });
   const paintSignBar = (d, v) => {
@@ -3135,7 +3173,7 @@ function intakePage(r, opts = {}) {
     }
   };
   const cmpBar = h('div', { class: 'rqp-cmp', hidden: true });
-  const scroll = h('div', { class: 'rqp-scroll' }, cmpBar, signBar, banner, page);
+  const scroll = h('div', { class: 'rqp-scroll' }, cmpBar, apBar, signBar, banner, page);
   const latestIn = (d) => d.versions.length - 1;
   const titleOf = (d) => d.title.replace(/\.(docx?|pdf|txt|md)$/i, '');
   /* inside a request about one company, its name is not repeated at the front of every document */
@@ -3368,7 +3406,7 @@ function intakePage(r, opts = {}) {
       h('span', { class: 'rqp-ver-c', html: ICON('<path d="m7 10 5 5 5-5"/>', 13) }));
     verBtn.replaceChildren(`v${vi + 1}`, h('span', { class: 'rqp-ver-c', html: ICON('<path d="m7 10 5 5 5-5"/>', 12) }));
     verBtn.title = `${v.name} · ${v.by}`;
-    paintSignBar(d, v);
+    paintSignBar(d, v); paintApBar(d, v);
     banner.hidden = vi === latestIn(d) || (!signBar.hidden && !!mxDocSign(r, d));
     banner.replaceChildren(h('span', {}, `You are looking at v${vi + 1}, ${v.name.toLowerCase()}.`),
       h('button', { class: 'mx-link', type: 'button', onclick: () => { vi = latestIn(d); paintDoc(); } }, `Back to v${d.versions.length}`));
@@ -3432,6 +3470,8 @@ function intakePage(r, opts = {}) {
       else v.blocks = [...page.children].map(el => ({ t: el.tagName === 'H1' ? 'h1' : el.tagName === 'H2' ? 'h2' : el.classList.contains('doc-meta') ? 'meta' : 'p', v: el.innerHTML }));
       v.edited = { by: USER.name, when: mxNow() };
       if (!editLogged) { editLogged = true; mxLog(r, { ev: 'version', what: `edited v${vi + 1} of ${titleOf(d)}`, ref: { doc: d.id, v: vi + 1 } }); }
+      /* a change to an approved version, or to one sent back for changes, goes for approval again */
+      if (mxVerOk(v) || v.ap?.state === 'changes') { mxApAsk(r, d, v); paintApBar(d, v); if (tab === 'docs' || tab === 'summary') paintBody(); }
       r.updated = mxNow(); save();
     }, 700);
   });
@@ -3482,7 +3522,7 @@ function intakePage(r, opts = {}) {
         const name = `${r.counterparty || 'Draft'} — ${t.name}`;
         const d = { id: pbUid('doc'), title: `${name}.docx`, source: t.id, versions: [{ name: 'First draft', by: 'Clavia', when: mxNow(), file: `${name}.docx`,
           blocks: mxDraftBlocks(t, { counterparty: r.counterparty, counterparty_address: r.address }) }] };
-        docs.push(d); return d;
+        docs.push(d); mxApAsk(r, d, d.versions[0]); return d;
       });
       r.documents = docs; r.updated = mxNow();
       made.forEach(d => add({ ev: 'version', who: 'Clavia', what: `drafted ${d.title.replace(/\.docx$/, '')} from the template`, ref: { doc: d.id, v: 1 } }));
@@ -3530,7 +3570,9 @@ function intakePage(r, opts = {}) {
        signing (not comparisons), each at its latest version; any other document can be added */
     const sendable = (d) => !mxDocLocked(r, d);
     const sent = docs.filter(d => mxDocLocked(r, d));
-    const rows = docs.filter(d => sendable(d) && mxDocRelevant(d)).map(d => ({ id: d.id, k: d.versions.length - 1 }));
+    /* each at its newest approved version: a version waiting for approval cannot be sent */
+    const okK = (d) => mxLatestOk(d);
+    const rows = docs.filter(d => sendable(d) && mxDocRelevant(d)).map(d => ({ id: d.id, k: okK(d) }));
     const docOf = (row) => docs.find(d => d.id === row.id);
     const chosen = () => rows;
     const spare = () => docs.filter(d => sendable(d) && !rows.some(x => x.id === d.id));
@@ -3554,18 +3596,18 @@ function intakePage(r, opts = {}) {
     const onKey = (e) => { if (e.key === 'Escape' && !document.querySelector('.mx-tpk')) { e.stopPropagation(); close(); } };
     const dlg = h('div', { class: 'pb-dlg mx-rqf mx-ss', role: 'dialog', 'aria-modal': 'true', 'aria-label': 'Send for signature' });
     dim.append(dlg);
-    const verPick = (btn, row) => listFrom(btn, docOf(row).versions.map((v, k) => [row.k === k, h('span', { class: 'mx-cmp-v' }, `v${k + 1}`), v.name, `${v.by || ''}${v.when ? ' · ' + new Date(v.when).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }) : ''}`,
-      () => { row.k = k; paint(); }]).reverse());
+    const verPick = (btn, row) => listFrom(btn, docOf(row).versions.map((v, k) => [row.k === k, h('span', { class: 'mx-cmp-v' }, `v${k + 1}`), v.name, `${mxVerOk(v) ? '' : v.ap.state === 'changes' ? 'Changes asked · ' : 'Awaiting approval · '}${v.by || ''}${v.when ? ' · ' + new Date(v.when).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }) : ''}`,
+      () => { if (!mxVerOk(docOf(row).versions[k])) return pbToast(`v${k + 1} needs approval before it can be sent`); row.k = k; paint(); }]).reverse());
     /* a list hung from a row, as wide as the box it belongs to */
     const widen = (btn) => { const pop = document.querySelector('.mx-tpk'), box = btn.closest('.mx-ss-sec')?.querySelector('.mx-ss-box') || btn; if (!pop) return; pop.classList.add('mx-ss-list');
       const rr = (btn.closest('.mx-ss-doc-r') || box).getBoundingClientRect(), bw = box.getBoundingClientRect(); pop.style.setProperty('--ss-w', bw.width + 'px'); pop.style.left = bw.left + 'px'; pop.style.top = (rr.bottom + 4) + 'px'; };
     /* the chevron: swap this row for a document that is not in the list yet */
     const docPick = (btn, row) => {
-      listFrom(btn, [docOf(row), ...spare()].map(d => [d.id === row.id, tileOf(d), titleOf(d), nVer(d), () => { if (d.id !== row.id) { row.id = d.id; row.k = d.versions.length - 1; paint(); } }]));
+      listFrom(btn, [docOf(row), ...spare()].map(d => [d.id === row.id, tileOf(d), titleOf(d), nVer(d), () => { if (d.id !== row.id) { row.id = d.id; row.k = okK(d); paint(); } }]));
       widen(btn);
     };
     const addDoc = (btn) => {
-      listFrom(btn, spare().map(d => [false, tileOf(d), titleOf(d), nVer(d), () => { rows.push({ id: d.id, k: d.versions.length - 1 }); paint(); }]));
+      listFrom(btn, spare().map(d => [false, tileOf(d), titleOf(d), nVer(d), () => { rows.push({ id: d.id, k: okK(d) }); paint(); }]));
       widen(btn);
     };
     const docRow = (row) => {
@@ -3576,7 +3618,10 @@ function intakePage(r, opts = {}) {
           h('button', { class: 'mx-ss-pick', type: 'button', 'aria-haspopup': 'listbox', 'data-tip': spare().length ? 'Choose another document' : null, disabled: !spare().length,
             onclick: (e) => { e.stopPropagation(); docPick(e.currentTarget, row); } },
             h('span', { class: 'mx-ss-doc-n' }, titleOf(d)), spare().length ? h('span', { class: 'mx-ss-more', html: ICON('<path d="m7 10 5 5 5-5"/>', 14) }) : null),
-          h('button', { class: 'mx-ss-ver', type: 'button', 'data-tip': 'Choose the version to send', onclick: (e) => { e.stopPropagation(); verPick(e.currentTarget, row); } },
+          /* a newer version still waiting for approval is said beside the one that will go */
+          row.k >= 0 && row.k < d.versions.length - 1 && !mxVerOk(d.versions[d.versions.length - 1]) ? h('span', { class: 'mx-ss-apw', 'data-tip': 'Only approved versions can be sent' }, `v${d.versions.length} awaiting approval`) : null,
+          row.k < 0 ? h('span', { class: 'mx-ss-apw is-block' }, 'Not approved yet')
+          : h('button', { class: 'mx-ss-ver', type: 'button', 'data-tip': 'Choose the version to send', onclick: (e) => { e.stopPropagation(); verPick(e.currentTarget, row); } },
             `v${row.k + 1}`, h('span', { html: ICON('<path d="m7 10 5 5 5-5"/>', 12) })),
           h('button', { class: 'mx-ss-del', type: 'button', 'data-tip': 'Remove', 'aria-label': `Remove ${titleOf(d)}`,
             html: ICON('<path d="M5 7h14M10 7V5h4v2M7 7l1 12h8l1-12"/>', 15), onclick: () => { rows.splice(rows.indexOf(row), 1); paint(); } })));
@@ -3596,7 +3641,8 @@ function intakePage(r, opts = {}) {
     const foot = h('footer', { class: 'mx-rqf-foot mx-ss-foot' });
     const paintFoot = () => {
       const n = chosen().length;
-      const why = !n ? (!docs.some(sendable) ? 'Nothing left to send' : 'Add at least one document') : editing ? `Finish ${editing.co}’s signer` : '';
+      const blocked = rows.find(x => x.k < 0);
+      const why = !n ? (!docs.some(sendable) ? 'Nothing left to send' : 'Add at least one document') : blocked ? `${titleOf(docOf(blocked))} needs approval first` : editing ? `Finish ${editing.co}’s signer` : '';
       foot.replaceChildren(h('span', { class: 'mx-ss-why' }, why),
         h('button', { class: 'pb-btn', type: 'button', onclick: close }, 'Cancel'),
         h('button', { class: 'pb-btn pb-btn--primary', type: 'button', disabled: !!why, onclick: send }, `Send ${n || ''} for signature`.replace('  ', ' ')));
@@ -3638,8 +3684,7 @@ function intakePage(r, opts = {}) {
         const rd = mxRoundOf(r, d.id), q = rd && !rd.answered ? (rd.points || []).filter(p => !p.decision).length : 0;
         return c || q ? [{ n: shortOf(d), t: [c && mxPlural(c, 'open comment'), q && `${q} of their changes to answer`].filter(Boolean).join(' · ') }] : [];
       });
-      /* approvals asked for and not all in: say so before anything goes out */
-      const wait = mxSign(r)?.requested ? mxSignWaiting(r) : [];
+      const wait = [];
       const askLoose = () => loose.length ? pbConfirm({ title: 'Some of this is still open', lead: `Signers sign exactly what is sent. ${loose.length === 1 ? 'This document has' : 'These documents have'} open points.`,
         items: loose, action: 'Send anyway', run: go }) : go();
       if (wait.length) pbConfirm({ title: 'Approvals are still waiting', lead: `${r.id} should go for signature once ${wait.length === 1 ? 'this is' : 'these are'} in.`,
@@ -3662,7 +3707,7 @@ function intakePage(r, opts = {}) {
     e.stopPropagation();
     const d = docs[di];
     listFrom(verBtn, [
-      ...d.versions.map((v, i) => i).reverse().map(i => [i === vi, h('span', { class: 'rqp-ver-v' + (mxDocSign(r, d)?.v === i + 1 && mxDocSign(r, d).st !== 'voided' ? ' is-sent' : '') }, `v${i + 1}`, mxDocSign(r, d)?.v === i + 1 && mxDocSign(r, d).st !== 'voided' ? h('span', { class: 'rqp-ver-pen', html: ICON('<path d="M4 20h4L19 9l-4-4L4 16z"/>', 10) }) : null), d.versions[i].name + (i === latestIn(d) ? ' · Latest' : ''), (() => { const n = (r.activity || []).filter(a => (a.kind === 'note' || a.kind === 'reply') && a.ref?.doc === d.id && a.ref?.v === i + 1).length; const sent = mxDocSign(r, d)?.v === i + 1 && mxDocSign(r, d).st !== 'voided'; return `${sent ? 'Sent for signature · ' : ''}${pbWhen(d.versions[i].when)} · ${d.versions[i].by}${n ? ` · ${mxPlural(n, 'comment')}` : ''}`; })(), () => { vi = i; paintDoc(); }]),
+      ...d.versions.map((v, i) => i).reverse().map(i => [i === vi, h('span', { class: 'rqp-ver-v' + (mxDocSign(r, d)?.v === i + 1 && mxDocSign(r, d).st !== 'voided' ? ' is-sent' : '') }, `v${i + 1}`, mxDocSign(r, d)?.v === i + 1 && mxDocSign(r, d).st !== 'voided' ? h('span', { class: 'rqp-ver-pen', html: ICON('<path d="M4 20h4L19 9l-4-4L4 16z"/>', 10) }) : null), d.versions[i].name + (i === latestIn(d) ? ' · Latest' : ''), (() => { const n = (r.activity || []).filter(a => (a.kind === 'note' || a.kind === 'reply') && a.ref?.doc === d.id && a.ref?.v === i + 1).length; const sent = mxDocSign(r, d)?.v === i + 1 && mxDocSign(r, d).st !== 'voided', apw = d.versions[i].ap && d.versions[i].ap.state !== 'approved'; return `${sent ? 'Sent for signature · ' : ''}${apw ? (d.versions[i].ap.state === 'changes' ? 'Changes asked · ' : 'Awaiting approval · ') : ''}${pbWhen(d.versions[i].when)} · ${d.versions[i].by}${n ? ` · ${mxPlural(n, 'comment')}` : ''}`; })(), () => { vi = i; paintDoc(); }]),
       h('div', { class: 'rqp-vers-rule' }),
       [false, h('span', { class: 'rqp-ver-add', html: ICON('<path d="M12 6v12M6 12h12"/>', 13) }), 'Upload a New Version', '', () => upload(false)],
       [false, h('span', { class: 'rqp-ver-add', html: ICON('<path d="M7 4v16M7 20l-3-3M7 20l3-3M17 20V4M17 4l-3 3M17 4l3 3"/>', 13) }), 'Compare', '', () => compareDialog()]]);
@@ -3812,7 +3857,9 @@ function intakePage(r, opts = {}) {
     let to = (them.length ? them : ppl.slice(0, 1)).map(p => p.email);
     const side = (r.counterparty || '').split(/\s+/)[0] || 'them';
     /* what goes: document → version index; the one you are reading, at the version you are on */
-    const sel = new Map(docs.length ? [[docs[di].id, vi]] : []);
+    /* only approved versions go to the other side */
+    const k0 = docs.length ? (mxVerOk(docs[di].versions[vi]) ? vi : mxLatestOk(docs[di])) : -1;
+    const sel = new Map(k0 >= 0 ? [[docs[di].id, k0]] : []);
     let stage = 'compose', touched = false, reading = true;
     const subj = h('input', { class: 'mx-rqf-in mx-em-subj', type: 'text', 'aria-label': 'Subject' });
     const body = h('textarea', { class: 'mx-rqf-in mx-em-body', rows: '9', 'aria-label': 'Message', oninput: () => { touched = true; } });
@@ -3847,13 +3894,13 @@ function intakePage(r, opts = {}) {
     const chip = (email) => { const p = ppl.find(x => x.email === email); return h('span', { class: 'mx-em-chip' }, mxFace(p?.name || email, 'pb-av mx-em-av'), p?.name || email,
       stage === 'compose' ? h('button', { class: 'mx-em-chip-x', type: 'button', 'aria-label': `Remove ${p?.name || email}`, html: ICON('<path d="M7 7l10 10M17 7 7 17"/>', 11), onclick: () => { to = to.filter(x => x !== email); paint(); } }) : null); };
     const addTo = (btn) => menu(btn, ppl.filter(p => !to.includes(p.email)).map(p => ({ label: `${p.name} · ${p.role}`, run: () => { to.push(p.email); paint(); } })));
-    const verPick = (btn, d) => listFrom(btn, d.versions.map((v, k) => [sel.get(d.id) === k, h('span', { class: 'mx-cmp-v' }, `v${k + 1}`), v.name, `${v.by || ''}${v.when ? ' · ' + new Date(v.when).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }) : ''}`,
-      () => { sel.set(d.id, k); draft(); paint(); }]).reverse());
+    const verPick = (btn, d) => listFrom(btn, d.versions.map((v, k) => [sel.get(d.id) === k, h('span', { class: 'mx-cmp-v' }, `v${k + 1}`), v.name, `${mxVerOk(v) ? '' : 'Awaiting approval · '}${v.by || ''}${v.when ? ' · ' + new Date(v.when).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }) : ''}`,
+      () => { if (!mxVerOk(v)) return pbToast(`v${k + 1} needs approval before it can be emailed`); sel.set(d.id, k); draft(); paint(); }]).reverse());
     const docRow = (d) => {
-      const on = sel.has(d.id), k = sel.has(d.id) ? sel.get(d.id) : d.versions.length - 1;
+      const on = sel.has(d.id), k = sel.has(d.id) ? sel.get(d.id) : Math.max(0, mxLatestOk(d));
       return h('div', { class: 'mx-em-doc' + (on ? ' is-on' : '') },
         h('button', { class: 'mx-em-check', type: 'button', role: 'checkbox', 'aria-checked': String(on), 'aria-label': `Attach ${titleOf(d)}`,
-          html: on ? '<svg viewBox="0 0 16 16" width="11" height="11" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m3.5 8.3 2.8 2.8 6.2-6.4"/></svg>' : '', onclick: () => { if (on) sel.delete(d.id); else sel.set(d.id, d.versions.length - 1); draft(); paint(); } }),
+          html: on ? '<svg viewBox="0 0 16 16" width="11" height="11" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m3.5 8.3 2.8 2.8 6.2-6.4"/></svg>' : '', onclick: () => { if (on) sel.delete(d.id); else { if (mxLatestOk(d) < 0) return pbToast(`${titleOf(d)} has no approved version yet`); sel.set(d.id, mxLatestOk(d)); } draft(); paint(); } }),
         mxTile('file', mxExt(d.versions[k]?.file || d.title)),
         h('span', { class: 'mx-em-doc-t' }, h('span', { class: 'mx-em-doc-n' }, titleOf(d)), h('span', { class: 'mx-em-doc-s' }, d.versions[k]?.name || '')),
         h('button', { class: 'mx-em-ver', type: 'button', disabled: !on, 'data-tip': 'Choose the version to send', onclick: (e) => { e.stopPropagation(); verPick(e.currentTarget, d); } },

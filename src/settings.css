@@ -343,3 +343,14 @@
 .sx-rolepop-g { width: 18px; height: 20px; }
 .sx-rolepop-g svg { width: 18px; height: 18px; }
 .sx-rolepop { width: 344px; }
+.sx-ap-h { margin: 26px 0 10px; font-size: 14px; font-weight: 600; }
+.sx-ap-list { display: flex; flex-direction: column; border: 1px solid #E8E4DD; border-radius: 12px; overflow: hidden; }
+.sx-ap-rule { display: flex; align-items: center; gap: 14px; padding: 12px 14px; }
+.sx-ap-rule + .sx-ap-rule { border-top: 1px solid #EFECE6; }
+.sx-ap-rule .sx-tg { flex: 1; min-width: 0; }
+.sx-ap-rule.is-off .sx-ap-who, .sx-ap-rule.is-off .sx-ap-arrow { opacity: .45; }
+.sx-ap-arrow { color: var(--text-faint); }
+.sx-ap-who { width: 260px; height: 38px; font-size: 13.5px; }
+.sx-ap-eg { margin-top: 16px; padding: 12px 14px; border-radius: 10px; background: #F7F5F1; font-size: 13px; color: var(--text-soft); }
+.sx-ap-eg b { color: var(--text); font-weight: 500; }
+.sx-ap-eg p { margin: 4px 0 0; }

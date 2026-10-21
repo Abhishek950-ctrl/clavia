@@ -118,6 +118,32 @@ function stRulesPage() {
     h('section', { class: 'sx-sec is-first' }, table));
 }
 
+/* ── Document approvals: who approves a new version before it goes out ──
+   Each rule names when it applies and who approves. A version waits for
+   everyone whose rule fits; until then it can't be emailed to the other
+   side or sent for signature. Any change asks again. */
+function stApprovalsPage() {
+  const cfg = mxApCfg();
+  const people = [...MX_LEGAL, ...MX_STAFF];
+  const pick = (rule) => {
+    const sel = h('select', { class: 'mx-rqf-in sx-ap-who', 'aria-label': `Who approves when ${rule.when.toLowerCase()}`, onchange: (e) => { rule.who = e.target.value; save(); } },
+      h('option', { value: '@lawyer' }, 'The assigned lawyer'), ...people.map(p => h('option', { value: p.name }, `${p.name} · ${p.role.split(' · ')[0]}`)));
+    sel.value = rule.who; return sel;
+  };
+  const list = h('div', { class: 'sx-ap-list' });
+  const paint = () => list.replaceChildren(...cfg.rules.map(rule => h('div', { class: 'sx-ap-rule' + (rule.on && cfg.on ? '' : ' is-off') },
+    stToggle(rule.on, rule.when, `${rule.role} approves`, (v) => { rule.on = v; paint(); }),
+    h('span', { class: 'sx-ap-arrow', 'aria-hidden': 'true' }, '→'), pick(rule))));
+  paint();
+  const example = h('div', { class: 'sx-ap-eg' },
+    h('b', {}, 'For example'), h('p', {}, 'Grace uploads v4 of the Brightwell MSA. Its payment terms are outside the playbook, so v4 waits for Grace (any change) and Roger (outside the playbook). Once both approve, v4 can be emailed to Brightwell or sent for signature. If Roger asks for changes, Grace edits it and it goes to both again.'));
+  return h('div', { class: 'sx-page' },
+    stHead('Document approvals', 'Before a new version of a document is emailed to the other side or sent for signature, the people these rules name approve it. They approve beside the document, and it shows under My Approvals in Intake.'),
+    h('section', { class: 'sx-sec is-first' },
+      stToggle(cfg.on, 'Ask for approval on new versions', 'Uploads, drafts from a template, and edits made in Clavia', (v) => { cfg.on = v; paint(); }),
+      h('h3', { class: 'sx-ap-h' }, 'Who approves'), list, example));
+}
+
 /* ── Members ── */
 
 /* ── General ── */
