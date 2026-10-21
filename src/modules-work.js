@@ -1506,15 +1506,9 @@ function mxAddVersion(r, v, docId) {
    and the people who sign them. A document carries its own signing state
    from the last envelope it went out in; the request's status follows the
    least advanced document that still has to be signed.
-   A document is one of three kinds: to sign, an attachment that goes with
-   one (a schedule), or a reference that never leaves legal (a comparison). */
-const MX_DOC_ROLE = { sign: 'To sign', attachment: 'Attachment', reference: 'Reference' };
-function mxDocRole(d) {
-  if (d.role) return d.role;
-  const t = `${d.title} ${d.versions[d.versions.length - 1]?.name || ''}`;
-  return d.versions.some(v => v.cmp) || /\bv\d+\s+vs\s+v\d+|comparison/i.test(t) ? 'reference'
-    : /schedule|annex|exhibit|appendix|registration|attendees/i.test(t) ? 'attachment' : 'sign';
-}
+   Comparisons stay out of the count unless one is actually sent. */
+/* comparisons are for legal to read: they are not offered for signature unless someone adds one */
+const mxDocRelevant = (d) => !(d.versions.some(v => v.cmp) || /\bv\d+\s+vs\s+v\d+|comparison/i.test(`${d.title} ${d.versions[d.versions.length - 1]?.name || ''}`));
 function mxEnvelopes(r) {
   if (!r.envelopes) {
     r.envelopes = [];
@@ -1544,16 +1538,15 @@ const mxDocLocked = (r, d) => ['out', 'partial', 'expired', 'signed'].includes(m
 const MX_SIGN_CHIP = { draft: 'Draft', out: 'Out for signature', signed: 'Signed', declined: 'Declined', expired: 'Expired', voided: 'Voided' };
 function mxDocChip(r, d, cls = '') {
   const x = mxDocSign(r, d);
-  if (!x && (mxDocRole(d) === 'reference' || !mxEnvelopes(r).length)) return null;
+  if (!x && (!mxDocRelevant(d) || !mxEnvelopes(r).length)) return null;
   const k = x ? x.st : 'draft';
   const label = k === 'partial' ? `${x.ns} of ${x.n} signed` : MX_SIGN_CHIP[k];
   const tip = x ? x.e.signers.map(y => `${y.who}: ${y.state === 'signed' ? 'signed' : y.state === 'declined' ? 'declined' : 'not yet'}`).join(' · ') : 'Not sent for signature yet';
   return h('span', { class: `mx-sgc is-${k === 'partial' ? 'out' : k} ${cls}`, 'data-tip': tip }, label);
 }
-/* the documents that have to be signed before the request is: to-sign ones, or failing that whatever was sent */
+/* the documents that have to be signed before the request is: every document but a comparison, and anything that was sent */
 function mxToSign(r) {
-  const docs = mxDocuments(r), mine = docs.filter(d => mxDocRole(d) === 'sign');
-  return mine.length ? mine : docs.filter(d => mxEnvelopes(r).some(e => e.docs.some(y => y.doc === d.id)));
+  return mxDocuments(r).filter(d => mxDocRelevant(d) || mxEnvelopes(r).some(e => e.docs.some(y => y.doc === d.id)));
 }
 /* signing progress for the request, said short: "1/2 signed" */
 function mxSignCount(r) {
@@ -2321,7 +2314,7 @@ function intakePage(r, opts = {}) {
   /* Signatures: one card per envelope, newest first */
   const signing = () => {
     const envs = [...mxEnvelopes(r)].reverse(), c = mxSignCount(r);
-    const left = docs.filter(d => mxDocRole(d) !== 'reference' && !mxDocLocked(r, d));
+    const left = docs.filter(d => mxDocRelevant(d) && !mxDocLocked(r, d));
     const card = (e) => {
       const st = mxEnvState(e), live = ['out', 'partial', 'expired'].includes(st);
       const dots = h('button', { class: 'br-dots rqs-env-dots', type: 'button', 'aria-label': 'More', 'data-tip': 'More', html: PB_SVG.dots });
@@ -2352,7 +2345,7 @@ function intakePage(r, opts = {}) {
           h('span', { class: 'pb-grow' }), live ? dots : null),
         h('div', { class: 'rqs-env-docs' }, ...e.docs.map(y => { const d = docs.find(z => z.id === y.doc); if (!d) return null;
           return h('button', { class: 'rqs-env-doc', type: 'button', onclick: () => { openRef({ doc: d.id, v: y.v }); } }, mxTile('file', mxExt(d.title)), h('span', { class: 'rqs-env-doc-n' }, shortOf(d)),
-            mxDocRole(d) === 'attachment' ? h('span', { class: 'rqs-env-role' }, 'Attachment') : null, h('span', { class: 'rqs-env-v' }, `v${y.v}`)); })),
+            h('span', { class: 'rqs-env-v' }, `v${y.v}`)); })),
         e.reason ? h('p', { class: 'rqs-env-why' }, `“${e.reason}”`) : null,
         h('div', { class: 'rqs-env-sg' }, ...e.signers.map(signerRow)));
     };
@@ -2634,7 +2627,6 @@ function intakePage(r, opts = {}) {
       e.stopPropagation(); mxGlyphs();
       const name = d.title.replace(/\.(docx?|pdf|txt|md)$/i, '');
       const sx = mxDocSign(r, d), live = sx && ['out', 'partial', 'expired'].includes(sx.st);
-      const role = mxDocRole(d), setRole = (k) => { d.role = k; save(); add({ what: `marked ${name} as ${MX_DOC_ROLE[k].toLowerCase()}` }); afterSign(); };
       menu(b, [
         { label: mxDocLocked(r, d) ? 'Open in Word (read only)' : 'Open in Word', html: '<img src="assets/brand/word.svg" alt="" width="16" height="16">', run: () => { openRef({ doc: d.id }); giveFile(); } },
         { label: sx?.st === 'signed' ? 'Download Signed Copy' : 'Download', icon: 'download', run: () => { openRef({ doc: d.id }); giveFile(); pbToast('Downloading'); } },
@@ -2643,8 +2635,6 @@ function intakePage(r, opts = {}) {
         { label: 'Upload a New Version', icon: 'retry', run: () => { openRef({ doc: d.id }); upload(false); } },
         { label: 'Compare', icon: 'compare', run: () => { openRef({ doc: d.id }); compareDialog(); } },
         { label: 'Rename', icon: 'rename', run: () => renameVersion(d, d === docs[di] ? vi : d.versions.length - 1) },
-        { rule: true },
-        ...Object.entries(MX_DOC_ROLE).map(([k, l]) => ({ label: k === 'sign' ? 'Document to sign' : k === 'attachment' ? 'Attachment, goes with it' : 'Reference, never sent', icon: 'files', tick: k === role, run: () => { if (k !== role) setRole(k); } })),
         { rule: true },
         { label: 'Delete Document', icon: 'trash', danger: true, run: () => pbConfirm({ title: `Delete ${name}?`, lead: `Every version of it goes from ${r.id}. The rest of the request stays.`,
           action: 'Delete', run: () => {
@@ -2801,8 +2791,7 @@ function intakePage(r, opts = {}) {
         ((cs) => cs.length ? h('button', { class: 'rqp-dc-cmt is-ic', type: 'button', 'data-tip': `${mxPlural(cs.length, 'open comment')}`,
           onclick: (e) => { e.stopPropagation(); openCmts(d.id); } },
           h('span', { class: 'rqp-dc-cmt-ic', html: MX_TAB_ICONS.comments }), String(cs.length)) : null)(mxWComments(r).filter(c => c.doc === d.id && c.status !== 'closed')),
-        /* what kind of document it is, unless it is one to sign; and where its signing stands */
-        mxDocRole(d) !== 'sign' ? h('span', { class: 'rqp-dc-role' }, MX_DOC_ROLE[mxDocRole(d)]) : null,
+        /* where its signing stands */
         mxDocChip(r, d),
         /* the negotiation word ("With Brightwell", "3 to answer"), off 15 Oct: rows show only the comment count */
         ((rs) => DOC_ROUND_CHIP && rs ? h('button', { class: 'rqp-dc-round is-' + rs.k, type: 'button', 'data-tip': 'Open the round',
@@ -3043,7 +3032,7 @@ function intakePage(r, opts = {}) {
   /* always there beside the status, quieter than it: the modal says what goes and who signs */
   /* once nothing is left to send, the same place shows how the signing is going */
   const sigBtn = h('button', { class: 'rqp-sig', type: 'button' });
-  const allOut = () => mxEnvelopes(r).length > 0 && !docs.some(d => mxDocRole(d) !== 'reference' && !mxDocLocked(r, d));
+  const allOut = () => mxEnvelopes(r).length > 0 && !docs.some(d => mxDocRelevant(d) && !mxDocLocked(r, d));
   const paintSig = () => sigBtn.replaceChildren(h('span', { class: 'rqp-sig-ic', html: ICON('<path d="M4 20h4L19 9l-4-4L4 16z"/><path d="m13.5 6.5 4 4"/>', 14) }), allOut() ? 'Signing status' : 'Send for signature');
   paintSig();
   const docOpen = h('button', { class: 'br-pane rqp-doc-open', type: 'button', 'data-tip': 'Show document', 'aria-label': 'Show document' },
@@ -3429,15 +3418,15 @@ function intakePage(r, opts = {}) {
       action: 'Void and edit', run: () => { mxEnvVoid(r, x.e); afterSign(); pbToast('Voided. You can edit it now.'); } }); };
   const openSendSign = () => {
     const sg = mxSign(r);
-    /* what can go: anything not a reference and not already out or signed. Every such document is
-       in the list at its latest version unless taken off; anything taken off can be added back */
-    const sendable = (d) => mxDocRole(d) !== 'reference' && !mxDocLocked(r, d);
+    /* anything not already out or signed can go. The list opens with the ones that belong in a
+       signing (not comparisons), each at its latest version; any other document can be added */
+    const sendable = (d) => !mxDocLocked(r, d);
     const sent = docs.filter(d => mxDocLocked(r, d));
-    const rows = docs.filter(sendable).map(d => ({ id: d.id, k: d.versions.length - 1 }));
+    const rows = docs.filter(d => sendable(d) && mxDocRelevant(d)).map(d => ({ id: d.id, k: d.versions.length - 1 }));
     const docOf = (row) => docs.find(d => d.id === row.id);
     const chosen = () => rows;
     const spare = () => docs.filter(d => sendable(d) && !rows.some(x => x.id === d.id));
-    const nVer = (d) => `${d.versions.length} ${d.versions.length === 1 ? 'version' : 'versions'}${mxDocRole(d) === 'attachment' ? ' · Attachment' : ''}`;
+    const nVer = (d) => `${d.versions.length} ${d.versions.length === 1 ? 'version' : 'versions'}`;
     const tileOf = (d) => mxTile('file', mxExt(d.versions[d.versions.length - 1]?.file || d.title));
     /* the signers: whoever signed the last envelope, else the request's own */
     const lastEnv = mxEnvelopes(r)[mxEnvelopes(r).length - 1];

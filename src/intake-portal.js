@@ -61,8 +61,8 @@ function mxRequesterPage(r) {
         : h('div', { class: 'rqo-msg-t' }, a.ev === 'submit' ? (r.detail || 'Submitted the request') : a.what));
   }));
 
-  /* what they share is what they would read: no comparisons; a signed document shows as signed */
-  const docs = mxDocuments(r).filter(d => mxDocRole(d) !== 'reference');
+  /* a signed document shows as signed */
+  const docs = mxDocuments(r);
   const live = mxEnvelopes(r).filter(e => ['out', 'partial', 'expired'].includes(mxEnvState(e)));
   const signLine = live.length ? h('p', { class: 'rqo-signing' }, h('span', { class: 'mx-st-mi', style: `color:${MX_ST.req.signature.color}`, html: MX_ST.req.signature.svg }),
       `Out for signature with ${[...new Set(live.flatMap(e => e.signers.filter(x => x.side === 'them').map(x => x.who)))].join(' and ') || 'the signers'}. The signed copy will appear here.`)
