@@ -2857,8 +2857,8 @@ function intakePage(r, opts = {}) {
     docs.length ? h('div', { class: 'rqp-docs rqp-docs--flat' }, pendingCmp ? h('div', { class: 'rqp-dc is-pending', 'aria-busy': 'true' }, mxTile('file', 'docx'),
         h('span', { class: 'rqp-person-t' }, h('span', { class: 'rqp-pc-n' }, pendingCmp.name)),
         h('span', { class: 'rqp-dc-ring', 'aria-label': 'Comparing' })) : null, ...docs.map(docRow)) : h('p', { class: 'rqp-empty' }, 'No documents yet.'),
-    h('button', { class: 'rqp-addsh rqp-addsh--drop', type: 'button', onclick: () => upload(true) },
-      h('span', { class: 'rqp-addsh-ic', html: ICON('<path d="M12 6v12M6 12h12"/>', 14) }), h('span', {}, 'Upload a document')),
+    h('button', { class: 'rqp-addsh rqp-addsh--drop', type: 'button', onclick: () => addDocument() },
+      h('span', { class: 'rqp-addsh-ic', html: ICON('<path d="M12 6v12M6 12h12"/>', 14) }), h('span', {}, 'Add a document')),
   ];
 
   /* Activity: the request's history, day by day, on one thin line. Things
@@ -3462,6 +3462,63 @@ function intakePage(r, opts = {}) {
   };
   /* Send for signature, from the header: which documents at which versions,
      and who signs on each side, each signer checked or corrected in place */
+  /* a document in, the two ways New Request offers: drafted from one of our templates, filled
+     with what the request already says, or their paper uploaded */
+  const addDocument = () => {
+    const tpls = mxData().templates.filter(t => t.status === 'live');
+    const picked = new Set();
+    let mode = 'choose';
+    const dim = h('div', { class: 'pb-dim mx-rqf-dim', onclick: (e) => { if (e.target === dim) close(); } });
+    const close = () => { dim.classList.add('is-closing'); setTimeout(() => dim.remove(), 150); removeEventListener('keydown', onKey, true); };
+    const onKey = (e) => { if (e.key === 'Escape') { e.stopPropagation(); if (mode === 'tpl') { mode = 'choose'; paint(); } else close(); } };
+    const dlg = h('div', { class: 'pb-dlg mx-rqf mx-ss mx-adddoc', role: 'dialog', 'aria-modal': 'true', 'aria-label': 'Add a document' });
+    dim.append(dlg);
+    const x = () => h('button', { class: 'pbv-icon mx-rqf-x', type: 'button', 'aria-label': 'Close', onclick: close, html: ICON('<path d="M6 6l12 12M18 6 6 18"/>', 14) });
+    const q = h('input', { class: 'mx-tpk-q mx-adddoc-q', type: 'text', placeholder: 'Find a template…', autocomplete: 'off', oninput: () => paintList() });
+    const list = h('div', { class: 'mx-adddoc-list', role: 'listbox', 'aria-multiselectable': 'true' });
+    const TICK = '<svg viewBox="0 0 16 16" width="11" height="11" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m3.5 8.3 2.8 2.8 6.2-6.4"/></svg>';
+    const create = h('button', { class: 'pb-btn pb-btn--primary', type: 'button', onclick: () => {
+      const made = [...picked].map(id => tpls.find(t => t.id === id)).filter(Boolean).map(t => {
+        const name = `${r.counterparty || 'Draft'} — ${t.name}`;
+        const d = { id: pbUid('doc'), title: `${name}.docx`, source: t.id, versions: [{ name: 'First draft', by: 'Clavia', when: mxNow(), file: `${name}.docx`,
+          blocks: mxDraftBlocks(t, { counterparty: r.counterparty, counterparty_address: r.address }) }] };
+        docs.push(d); return d;
+      });
+      r.documents = docs; r.updated = mxNow();
+      made.forEach(d => add({ ev: 'version', who: 'Clavia', what: `drafted ${d.title.replace(/\.docx$/, '')} from the template`, ref: { doc: d.id, v: 1 } }));
+      save(); close();
+      pbToast(made.length > 1 ? `${made.length} drafts added` : `${made[0].title.replace(/\.docx$/, '')} drafted`);
+      MX.intake.tab = 'docs'; MX.intake.openDoc = made[0].id; mxOpen('intake', r.id); go('intake');
+    } });
+    const paintList = () => {
+      const t0 = q.value.trim().toLowerCase();
+      const shown = tpls.filter(t => !t0 || `${t.name} ${t.kind || ''}`.toLowerCase().includes(t0));
+      list.replaceChildren(...(shown.length ? shown.map(t => { const on = picked.has(t.id);
+        return h('button', { class: 'mx-tpk-row' + (on ? ' is-on' : ''), type: 'button', role: 'option', 'aria-selected': String(on), onclick: () => { on ? picked.delete(t.id) : picked.add(t.id); paintList(); } },
+          h('span', { class: 'mx-tpk-box' + (on ? ' is-on' : ''), html: on ? TICK : '' }), mxTile('tpl'),
+          h('span', { class: 'mx-rqf-pick-t' }, h('span', { class: 'mx-rqf-pick-n' }, t.name), h('span', { class: 'mx-rqf-pick-s' }, [t.kind, 'v' + mxTplVer(t)].filter(Boolean).join(' · ')))); })
+        : [h('div', { class: 'mx-tpk-none' }, `No template called “${q.value.trim()}”`)]));
+      create.disabled = !picked.size;
+      create.textContent = picked.size > 1 ? `Create ${picked.size} drafts` : 'Create draft';
+    };
+    const tile = (cls, icon, title, sub, run) => h('button', { class: 'mx-rqf-tile mx-adddoc-tile', type: 'button', onclick: run },
+      h('span', { class: 'mx-rqf-tile-ic ' + cls }, icon), h('span', { class: 'mx-rqf-tile-t' }, h('b', {}, title), h('span', {}, sub)));
+    const paint = () => {
+      if (mode === 'choose') dlg.replaceChildren(
+        h('header', { class: 'mx-rqf-head mx-ss-head' }, h('div', {}, h('h2', { class: 'pb-dlg-t' }, 'Add a document'), h('p', { class: 'mx-ss-sub' }, r.counterparty || r.title)), x()),
+        h('div', { class: 'mx-rqf-body mx-ss-bd' }, h('div', { class: 'mx-rqf-tiles' },
+          tile('is-tpl', mxTile('tpl'), 'From a template', 'Our paper, filled in for you', () => { mode = 'tpl'; paint(); q.focus(); }),
+          tile('is-up', h('span', { html: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 15V4M7.5 8.5 12 4l4.5 4.5"/><path d="M4.5 14.5v4A1.5 1.5 0 0 0 6 20h12a1.5 1.5 0 0 0 1.5-1.5v-4"/></svg>' }),
+            'Upload a file', 'Their paper: Word, PDF or text', () => { close(); upload(true); }))));
+      else { dlg.replaceChildren(
+        h('header', { class: 'mx-rqf-head mx-ss-head' }, h('div', {}, h('h2', { class: 'pb-dlg-t' }, 'From a template'), h('p', { class: 'mx-ss-sub' }, 'Choose one or more. Each becomes a first draft on this request.')), x()),
+        h('div', { class: 'mx-rqf-body mx-ss-bd' }, h('div', { class: 'mx-adddoc-box' }, h('div', { class: 'mx-tpk-head' }, h('span', { class: 'mx-tpk-glass', html: PB_SVG.search }), q), list)),
+        h('footer', { class: 'mx-rqf-foot' }, h('button', { class: 'pb-btn', type: 'button', onclick: () => { mode = 'choose'; paint(); } }, 'Back'), create));
+        paintList(); }
+    };
+    paint();
+    document.body.append(dim); addEventListener('keydown', onKey, true);
+  };
   /* a sent document takes no new version: void the request first, or wait for the signatures */
   const lockedSay = (d) => { const x = mxDocSign(r, d);
     if (x.st === 'signed') return pbToast(`${shortOf(d)} is signed. Add a new document instead.`);
@@ -3599,7 +3656,7 @@ function intakePage(r, opts = {}) {
     void d;
     listFrom(docBtn, [
       ...docs.map((x, i) => [i === di, mxTile('file', mxExt(x.title)), shortOf(x), `v${x.versions.length} · ${pbWhen(x.versions[latestIn(x)].when)}${((z) => !z || z.st === 'voided' ? '' : ' · ' + (z.st === 'partial' ? `${z.ns} of ${z.n} signed` : MX_SIGN_CHIP[z.st]))(mxDocSign(r, x))}`, () => { di = i; vi = latestIn(x); paintDoc(); }]),
-      [false, h('span', { class: 'rqp-ver-add rqp-ver-add--doc', html: ICON('<path d="M12 6v12M6 12h12"/>', 13) }), 'Add another document', 'Word, PDF or text', () => upload(true)]]);
+      [false, h('span', { class: 'rqp-ver-add rqp-ver-add--doc', html: ICON('<path d="M12 6v12M6 12h12"/>', 13) }), 'Add another document', 'From a template, or upload a file', () => addDocument()]]);
   };
   verBtn.onclick = (e) => {
     e.stopPropagation();
@@ -4402,7 +4459,7 @@ function intakePage(r, opts = {}) {
   const upBtn = h('button', { class: 'rqp-tool rqp-tool--icon', type: 'button', 'data-tip': 'Upload', 'aria-label': 'Upload', html: ICON('<path d="M12 15.5V3.5M8 7.5l4-4 4 4"/><path d="M4 14v5a1.5 1.5 0 0 0 1.5 1.5h13A1.5 1.5 0 0 0 20 19v-5"/>'),
     onclick: (e) => { e.stopPropagation(); mxGlyphs(); menu(upBtn, [
       { label: `New Version of ${titleOf(docs[di])}`, icon: 'retry', run: () => upload(false) },
-      { label: 'Add Another Document', icon: 'files', run: () => upload(true) }]); } });
+      { label: 'Add Another Document', icon: 'files', run: () => addDocument() }]); } });
   let right;
   const ingesting = (r.ingesting || []).length;
   if (docs.length) {
@@ -4421,6 +4478,8 @@ function intakePage(r, opts = {}) {
             onclick: () => { if (right.classList.contains('has-cmts')) showPanelNow(false); state.rqDocHidden = true; save(); grid.classList.add('is-doc-hidden'); } }))),
       h('div', { class: 'rqp-docbody' }, scroll, cpanel));
     if (state.rqCmtPanel) right.classList.add('has-cmts');
+    /* just added: open on it */
+    if (MX.intake.openDoc) { const i = docs.findIndex(x => x.id === MX.intake.openDoc); if (i >= 0) { di = i; vi = docs[i].versions.length - 1; } delete MX.intake.openDoc; }
     paintDoc();
   } else if (ingesting) {
     right = h('section', { class: 'rqp-right rqp-right--empty' }, h('div', { class: 'rqp-none' }, quillEl('work', { cls: 'mx-pass-q' }), h('b', {}, `Reading ${r.ingesting[0]}`), h('p', {}, 'It shows here in a moment.')));
@@ -4436,7 +4495,7 @@ function intakePage(r, opts = {}) {
           r.type === 'Advice' ? h('button', { class: 'btn btn--primary', type: 'button', onclick: () => fp.action.run() }, fp.action.label)
           : fp.action.reply ? h('button', { class: 'btn btn--primary', type: 'button', onclick: () => { setTab('activity'); box.value = fp.action.reply; mode = 'reply'; paintMode(); send.disabled = false; box.focus(); } }, fp.action.label)
           : h('button', { class: 'btn btn--primary', type: 'button', onclick: () => fp.action.run() }, fp.action.label),
-          r.type !== 'Advice' ? h('button', { class: 'btn', type: 'button', onclick: () => upload(true) }, 'Upload a Document') : '')));
+          r.type !== 'Advice' ? h('button', { class: 'btn', type: 'button', onclick: () => addDocument() }, 'Add a Document') : '')));
   }
 
   grid = h('div', { class: 'rqp' + (state.rqCmtPanel && docs.length && CMT_FOCUS ? ' is-cmt-focus' : '') + (MX.intake.swap ? ' is-swap' : '') }, left, right);
