@@ -4794,7 +4794,7 @@ function homeHead() {
     /* the lockup, in the identity study's proportions */
     ? h('div', { class: 'home-head home-head--sign' },
         quillEl('greet', { cls: 'home-quill', then: 'idle' }),
-        h('h1', { class: 'display' }, 'Ask Clavia'))
+        h('h1', { class: 'display' }, 'Ask Clavia Abhishek'))
     : h('div', { class: 'home-head' },
         quillEl('greet', { cls: 'home-glyph', then: 'idle' }),
         h('h1', { class: 'display' }, 'How can I help you today?'));

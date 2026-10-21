@@ -136,7 +136,7 @@ body[data-bare="true"] .br-dock { padding-left: 22px; padding-right: 22px; }
 }
 .brand-symbol { width: 28px; height: 28px; flex: none; }
 .brand-word {
-  width: 86px; height: 28px; flex: none;
+  width: 180px; height: 28px; flex: none;
   transition: width var(--slow) var(--ease),
               opacity var(--base) var(--ease) 100ms;
 }
