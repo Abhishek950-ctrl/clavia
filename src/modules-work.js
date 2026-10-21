@@ -355,6 +355,7 @@ function mxIntake() {
   /* the requests Roger keeps an eye on without having them */
   if (d.followV !== 1) { for (const r of d.intake) if (['RQ-1047', 'RQ-1043'].includes(r.id)) r.followed = true; d.followV = 1; save(); }
   for (const r of d.intake) {
+    mxStatusFix(r);
     if (r.source === undefined) r.source = MX_SOURCE[r.id]?.via || null;
     r.submitter ||= MX_SUBMITTERS[r.id] || USER.name;
     if (r.detail == null) r.detail = MX_ASKS[r.id] || '';
@@ -368,7 +369,7 @@ function mxIntake() {
       r.activity = [{ who: r.submitter, what: 'submitted the request', when: r.created }];
       if (r.attorney) r.activity.push(r.attorney === 'Roger Bennett' ? { who: 'Roger Bennett', what: 'took this on', when: at(2) }
         : { who: 'Roger Bennett', what: `assigned this to ${r.attorney}`, when: at(2) });
-      if (r.status === 'progress' || r.status === 'waiting') r.activity.push({ who: r.attorney || 'Roger Bennett', what: 'moved this to In Progress', when: at(5) });
+      if (!['new', 'done', 'cancelled'].includes(r.status)) r.activity.push({ who: r.attorney || 'Roger Bennett', what: `moved this to ${(MX_ST.req[r.status === 'waiting' ? mxStatusAt(r, mxStage(r)) : r.status] || MX_ST.req.drafting).label}`, when: at(5) });
       const ASKBACK = {
         Advice: 'Which customers’ logos would go on the site? I will check what each of their agreements allows.',
         Privacy: `Could you send ${r.counterparty || 'their'}’s marked-up DPA as a Word file? The PDF has lost the tracked changes.`,
@@ -838,11 +839,24 @@ function mxStage(r) {
   r.stage = Math.min(r.stage, s.length - 1);
   return r.stage;
 }
-/* finished with: completed or cancelled */
+/* finished with: signed or cancelled */
 const mxClosed = (r) => r.status === 'done' || r.status === 'cancelled';
+/* the status a stage of the path reads as */
+function mxStatusAt(r, i) {
+  const s = mxStages(r), name = s[i] || '';
+  return i === s.length - 1 ? 'done' : i === 0 ? 'new' : /negotiation/i.test(name) ? 'negotiation' : /signing/i.test(name) ? 'signature' : 'drafting';
+}
+/* the statuses a kind of request can be in, and what its finish is called:
+   a question is answered and a notice sent; only agreements are signed */
+function mxStKeys(r) {
+  const p = mxPipe(r);
+  return Object.keys(MX_ST.req).filter(k => !(p === 'advice' && (k === 'negotiation' || k === 'signature')) && !(p === 'notice' && k === 'negotiation'));
+}
+const mxStLabel = (r, k) => k === 'done' && mxPipe(r) === 'advice' ? 'Answered' : k === 'done' && mxPipe(r) === 'notice' ? 'Sent' : (MX_ST.req[k] || MX_ST.req.drafting).label;
+/* before 21 Oct a request was just "In progress"; it now says where the work is */
+const mxStatusFix = (r) => { if (!MX_ST.req[r.status]) r.status = r.status === 'progress' ? mxStatusAt(r, mxStage(r)) : 'drafting'; };
 function mxSetStage(r, i) {
-  const s = mxStages(r);
-  r.stage = i; r.status = i === s.length - 1 ? 'done' : i === 0 ? 'new' : 'progress';
+  r.stage = i; r.status = mxStatusAt(r, i);
   r.updated = mxNow(); save();
 }
 /* the ring for any stage of a path, for the menu */
@@ -1176,28 +1190,41 @@ function mxRoundSay(r, d) {
 /* the stage where you see it, changeable there: the whole path in order,
    what is done ticked, where it is now marked, what is left dotted */
 /* ── a request's status, as a task's ──
-   New · In progress · Waiting · Completed · Cancelled (MX_ST.req). The path the work takes
+   New · Drafting · Negotiation · Waiting · Out for signature · Signed · Cancelled (MX_ST.req). The path the work takes
    (drafting, negotiation, signing) still runs underneath for approvals and signatures. */
 function mxReqStatusMenu(anchor, r, picked) {
-  pbWaysMenu(anchor, 'mx-st', Object.entries(MX_ST.req).map(([k, v]) => ({
-    key: k, name: v.label, on: k === r.status,
+  pbWaysMenu(anchor, 'mx-st', mxStKeys(r).map(k => [k, MX_ST.req[k]]).map(([k, v]) => ({
+    key: k, name: mxStLabel(r, k), on: k === r.status,
     icon: () => h('span', { class: 'mx-st-mi', style: `color:${v.color}`, html: v.svg }) })),
   (k) => {
     if (k === r.status) return;
+    mxUnsignedGate(r, k, () => setIt(k));
+  }, { small: true });
+  function setIt(k) {
     const was = r.status;
     r.status = k; r.updated = mxNow(); save();
-    mxLog(r, { ev: 'status', what: `moved this to ${MX_ST.req[k].label}` });
+    mxLog(r, { ev: 'status', what: `moved this to ${mxStLabel(r, k)}` });
     picked?.(k, was);
     /* finishing takes it off the open list, with a way back */
-    if (k === 'done' || k === 'cancelled') pbToast(`${r.id} is ${MX_ST.req[k].label.toLowerCase()}`, { label: 'Undo', run: () => { r.status = was; (r.activity || []).pop(); save(); picked?.(was, k); } });
-  }, { small: true });
+    if (k === 'done' || k === 'cancelled') pbToast(`${r.id} is ${mxStLabel(r, k).toLowerCase()}`, { label: 'Undo', run: () => { r.status = was; (r.activity || []).pop(); save(); picked?.(was, k); } });
+  }
+}
+/* calling a request signed while some of its documents are not asks first */
+function mxUnsignedGate(r, k, go) {
+  /* every document to sign that is not signed yet, whether or not it has been sent */
+  const left = k === 'done' && mxPipe(r) !== 'advice' ? mxToSign(r).filter(d => mxDocSign(r, d)?.st !== 'signed') : [];
+  if (!left.length) return go();
+  const say = mxStLabel(r, 'done').toLowerCase();
+  pbConfirm({ title: `Mark ${r.id} as ${say}?`, lead: `${left.length === 1 ? 'This document has' : 'These documents have'} not been signed yet. Mark it ${say} anyway?`,
+    items: left.map(d => ({ n: MX_SIGN_CHIP[mxDocSign(r, d)?.st] || (mxDocSign(r, d) ? `${mxDocSign(r, d).ns} of ${mxDocSign(r, d).n} signed` : 'Draft'), t: d.title.replace(/\.\w+$/, '') })),
+    action: `Mark as ${say}`, run: go });
 }
 function mxReqStatusBtn(r, after) {
-  if (!MX_ST.req[r.status]) r.status = 'progress';
+  mxStatusFix(r);
   const btn = h('button', { class: 'pb-st mx-st mx-st-btn', type: 'button', 'data-tip': 'Change Status', 'aria-haspopup': 'menu',
     onclick: (e) => { e.stopPropagation(); mxReqStatusMenu(btn, r, (k) => { paint(); btn.classList.remove('is-set'); void btn.offsetWidth; btn.classList.add('is-set'); after?.(k); }); } });
-  const paint = () => { const v = MX_ST.req[r.status] || MX_ST.req.progress; btn.style.setProperty('--st', v.color);
-    btn.replaceChildren(h('span', { class: 'pb-st-ic', html: v.svg }), v.label,
+  const paint = () => { const v = MX_ST.req[r.status] || MX_ST.req.drafting; btn.style.setProperty('--st', v.color);
+    btn.replaceChildren(h('span', { class: 'pb-st-ic', html: v.svg }), mxStLabel(r, r.status),
       ...(btn.classList.contains('rqp-stage') ? [h('span', { class: 'rqp-stage-chev', html: '<svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="m7 10 5 5 5-5"/></svg>' })] : [])); };
   paint();
   btn._paint = paint;
@@ -1473,6 +1500,131 @@ function mxAddVersion(r, v, docId) {
   r.updated = mxNow(); save();
   return d || docs[docs.length - 1];
 }
+
+/* ── signing, document by document (21 Oct) ───────────────────
+   Every send is an envelope: some documents, each at the version sent,
+   and the people who sign them. A document carries its own signing state
+   from the last envelope it went out in; the request's status follows the
+   least advanced document that still has to be signed.
+   A document is one of three kinds: to sign, an attachment that goes with
+   one (a schedule), or a reference that never leaves legal (a comparison). */
+const MX_DOC_ROLE = { sign: 'To sign', attachment: 'Attachment', reference: 'Reference' };
+function mxDocRole(d) {
+  if (d.role) return d.role;
+  const t = `${d.title} ${d.versions[d.versions.length - 1]?.name || ''}`;
+  return d.versions.some(v => v.cmp) || /\bv\d+\s+vs\s+v\d+|comparison/i.test(t) ? 'reference'
+    : /schedule|annex|exhibit|appendix|registration|attendees/i.test(t) ? 'attachment' : 'sign';
+}
+function mxEnvelopes(r) {
+  if (!r.envelopes) {
+    r.envelopes = [];
+    /* a request sent the old way, one document at a time, becomes its first envelope */
+    const sg = r.sign;
+    if (sg?.sent && sg.doc) r.envelopes.push({ id: pbUid('env'), sent: sg.sent, docs: [{ doc: sg.doc.doc, v: sg.doc.v }], state: sg.signers.every(x => x.state === 'signed') ? 'signed' : 'out',
+      signers: sg.signers.map((x, i) => ({ who: x.who, title: '', email: x.who === USER.name ? USER.email : mxEmail(x.who || 'signer'), side: /for us|notice/i.test(x.what) ? 'us' : 'them', state: x.state === 'signed' ? 'signed' : 'sent', at: x.at })) });
+  }
+  return r.envelopes;
+}
+/* where an envelope stands: out, partly signed, signed, declined, voided, or past its date */
+function mxEnvState(e) {
+  if (e.state !== 'out') return e.state;
+  if (Date.now() > new Date(e.sent).getTime() + SIGN_EXPIRES_DAYS * 864e5) return 'expired';
+  return e.signers.some(x => x.state === 'signed') ? 'partial' : 'out';
+}
+const mxEnvEnds = (e) => new Date(new Date(e.sent).getTime() + SIGN_EXPIRES_DAYS * 864e5).toISOString();
+/* a document's signing, from the last envelope it went out in */
+function mxDocSign(r, d) {
+  const e = [...mxEnvelopes(r)].reverse().find(x => x.docs.some(y => y.doc === d.id));
+  if (!e) return null;
+  const st = mxEnvState(e), n = e.signers.length, ns = e.signers.filter(x => x.state === 'signed').length;
+  return { e, st, v: e.docs.find(y => y.doc === d.id).v, n, ns };
+}
+/* out, partly signed or signed: the version sent is what gets signed, so nothing new goes on it */
+const mxDocLocked = (r, d) => ['out', 'partial', 'expired', 'signed'].includes(mxDocSign(r, d)?.st);
+const MX_SIGN_CHIP = { draft: 'Draft', out: 'Out for signature', signed: 'Signed', declined: 'Declined', expired: 'Expired', voided: 'Voided' };
+function mxDocChip(r, d, cls = '') {
+  const x = mxDocSign(r, d);
+  if (!x && (mxDocRole(d) === 'reference' || !mxEnvelopes(r).length)) return null;
+  const k = x ? x.st : 'draft';
+  const label = k === 'partial' ? `${x.ns} of ${x.n} signed` : MX_SIGN_CHIP[k];
+  const tip = x ? x.e.signers.map(y => `${y.who}: ${y.state === 'signed' ? 'signed' : y.state === 'declined' ? 'declined' : 'not yet'}`).join(' · ') : 'Not sent for signature yet';
+  return h('span', { class: `mx-sgc is-${k === 'partial' ? 'out' : k} ${cls}`, 'data-tip': tip }, label);
+}
+/* the documents that have to be signed before the request is: to-sign ones, or failing that whatever was sent */
+function mxToSign(r) {
+  const docs = mxDocuments(r), mine = docs.filter(d => mxDocRole(d) === 'sign');
+  return mine.length ? mine : docs.filter(d => mxEnvelopes(r).some(e => e.docs.some(y => y.doc === d.id)));
+}
+/* signing progress for the request, said short: "1/2 signed" */
+function mxSignCount(r) {
+  if (!mxEnvelopes(r).length) return null;
+  const list = mxToSign(r);
+  return { n: list.length, signed: list.filter(d => mxDocSign(r, d)?.st === 'signed').length, out: list.filter(d => ['out', 'partial', 'expired', 'signed'].includes(mxDocSign(r, d)?.st)).length };
+}
+/* the request's status, from its least advanced document; only once something has been sent */
+function mxSignSync(r) {
+  if (!mxEnvelopes(r).length || r.status === 'cancelled') return;
+  const c = mxSignCount(r); if (!c?.n) return;
+  const k = c.signed === c.n ? 'done' : c.out === c.n ? 'signature' : r.status === 'waiting' ? 'waiting' : 'negotiation';
+  if (k === r.status) return;
+  const was = r.status; r.status = k;
+  const s = mxStages(r), at = k === 'done' ? s.length - 1 : s.indexOf(k === 'signature' ? 'Signing' : 'Negotiation');
+  if (at >= 0) r.stage = at;
+  if (was !== k) mxLog(r, { who: 'Clavia', ev: 'status', what: `moved this to ${mxStLabel(r, k)}` });
+}
+const mxSignedBy = (e) => e.signers.map(y => `${y.who}`).join(' and ');
+function mxEnvSend(r, items, signers) {
+  const e = { id: pbUid('env'), sent: mxNow(), state: 'out', docs: items.map(({ d, k }) => ({ doc: d.id, v: k + 1 })),
+    signers: signers.map(s => ({ who: s.name, title: s.title, email: s.email, side: s.them ? 'them' : 'us', state: 'sent', at: null })) };
+  mxEnvelopes(r).push(e);
+  items.forEach(({ d, k }) => mxLog(r, { ev: 'email', what: `sent v${k + 1} of ${d.title.replace(/\.\w+$/, '')} for signature to ${mxSignedBy(e)}`, ref: { doc: d.id, v: k + 1 } }));
+  mxSignSync(r); save();
+  return e;
+}
+function mxEnvSign(r, e, x) {
+  x.state = 'signed'; x.at = mxNow();
+  mxLog(r, { ev: 'status', what: x.who === USER.name ? 'signed for us' : `recorded ${x.who}’s signature` });
+  if (e.signers.every(y => y.state === 'signed')) {
+    e.state = 'signed'; e.ended = mxNow();
+    const docs = mxDocuments(r), on = (y) => new Date(y.at).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' });
+    for (const it of e.docs) {
+      const d = docs.find(z => z.id === it.doc); if (!d) continue;
+      const src = d.versions[it.v - 1] || d.versions[d.versions.length - 1];
+      mxAddVersion(r, { name: 'Signed copy', by: 'Clavia', when: mxNow(), file: `${d.title.replace(/\.\w+$/, '')} — signed.pdf`, signedCopy: e.id,
+        blocks: [...(src.blocks || []), { t: 'meta', v: e.signers.map(y => `SIGNED BY ${String(y.who).toUpperCase()}${y.title ? ', ' + y.title.toUpperCase() : ''} ON ${on(y).toUpperCase()}`).join(' · ') + ` · ENVELOPE ${e.id.toUpperCase()}` }],
+        note: 'Every signature in' }, d.id);
+    }
+    mxLog(r, { who: 'Clavia', ev: 'version', what: `everyone has signed: saved ${e.docs.length > 1 ? 'the signed copies' : 'the signed copy'}` });
+  }
+  mxSignSync(r); save();
+}
+function mxEnvDecline(r, e, x, why) {
+  x.state = 'declined'; x.at = mxNow(); e.state = 'declined'; e.ended = mxNow(); e.reason = why || '';
+  mxLog(r, { ev: 'status', what: `recorded that ${x.who} declined to sign${why ? `: “${why}”` : ''}` });
+  mxSignSync(r); save();
+}
+function mxEnvVoid(r, e) {
+  e.state = 'voided'; e.ended = mxNow();
+  mxLog(r, { ev: 'status', what: `voided the signature request and told ${mxSignedBy(e)}` });
+  mxSignSync(r); save();
+}
+function mxEnvRemind(r, e) {
+  const left = e.signers.filter(x => x.state !== 'signed');
+  left.forEach(x => { x.reminded = mxNow(); });
+  mxLog(r, { ev: 'email', what: `reminded ${left.map(x => x.who).join(' and ')} to sign` });
+  save();
+}
+function mxEnvResend(r, e) {
+  e.sent = mxNow(); e.signers.forEach(x => { if (x.state !== 'signed') { x.state = 'sent'; x.reminded = null; } });
+  mxLog(r, { ev: 'email', what: `sent the signature request again to ${e.signers.filter(x => x.state !== 'signed').map(x => x.who).join(' and ')}` });
+  save();
+}
+function mxEnvChangeSigner(r, e, x, to) {
+  const was = x.who;
+  Object.assign(x, { who: to.name, title: to.title, email: to.email, state: 'sent', at: null, reminded: null });
+  mxLog(r, { ev: 'assign', what: `changed a signer from ${was} to ${to.name}` });
+  save();
+}
 /* the issues Clavia has read from a request's versions, kept on the
    request once seen so a lawyer's status changes stick */
 const SHOW_ISSUES = false, SHOW_APPROVALS = true;
@@ -1664,9 +1816,11 @@ function mxSummary(r) {
     latest ? ['Latest', `${latest.d.title.replace(/\.(docx?|pdf|txt|md)$/i, '')} v${latest.d.versions.length}, ${/^(uploaded|new version)/i.test(latest.v.name) ? 'uploaded' : 'from ' + latest.v.by} ${said}.${docs.length > 1 ? ` ${docs.length} documents in all.` : ''}`]
       : r.type === 'Advice' ? null : ['Latest', 'No document has come in yet.'],
     /* where each document's negotiation stands, in one line */
-    ((list) => list.length ? ['Negotiation', list.join(' · ') + '.'] : null)(docs.map(d => { const rs = mxRoundSay(r, d); if (!rs) return null;
+    ((list) => list.length ? ['Negotiation', list.join(' · ') + '.'] : null)(docs.map(d => { const rs = !mxDocSign(r, d) || mxDocSign(r, d).st === 'voided' || mxDocSign(r, d).st === 'declined' ? mxRoundSay(r, d) : null; if (!rs) return null;
       const tag = /msa/.test(d.source || '') ? 'MSA' : d.source === 'dpa' ? 'DPA' : /nda/.test(d.source || '') ? 'NDA' : d.title.replace(/\.(docx?|pdf|txt|md)$/i, '');
       return `${tag} ${rs.k === 'with' ? rs.say.replace(/^With/, 'with') : rs.k === 'answer' ? `has ${rs.say}` : 'is ready to send back'}`; }).filter(Boolean)),
+    /* where the signing stands: what is out, who has signed, who it waits on, and what is left */
+    mxEnvelopes(r).length ? ['Signing', mxSignSay(r)] : null,
     read ? ['Review', read] : null,
     fp.needs ? ['Needed', `From ${r.submitter.split(' ')[0]}: ${fp.needs.join(' and ').toLowerCase()}.`] : null,
     /* where the conversation stands: the last thing anyone said */
@@ -1675,6 +1829,21 @@ function mxSummary(r) {
       return ['Last word', `${w.who === USER.name ? 'You' : w.who.split(' ')[0]}: “${t}”`]; })(),
   ].filter(Boolean);
   return { para, intro, points, fp, minutes: Math.max(1, Math.round(para.split(/\s+/).length / 200)) };
+}
+
+function mxSignSay(r) {
+  const docs = mxDocuments(r), nm = (d) => `${d.title.replace(/\.(docx?|pdf|txt|md)$/i, '')} v${mxDocSign(r, d).v}`;
+  const live = mxEnvelopes(r).filter(e => ['out', 'partial', 'expired'].includes(mxEnvState(e)));
+  const parts = live.map(e => {
+    const ds = e.docs.map(y => docs.find(d => d.id === y.doc)).filter(Boolean);
+    const done = e.signers.filter(x => x.state === 'signed').map(x => x.who.split(' ')[0]), wait = e.signers.filter(x => x.state !== 'signed').map(x => x.who);
+    return `${ds.map(nm).join(' and ')} ${ds.length > 1 ? 'are' : 'is'} out with ${e.signers.filter(x => x.side === 'them').map(x => x.who).join(' and ') || mxSignedBy(e)} since ${new Date(e.sent).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}${mxEnvState(e) === 'expired' ? ', and the request has expired' : ''}. ${done.length ? `${done.join(' and ')} signed; waiting on ${wait.join(' and ')}.` : `Waiting on ${wait.join(' and ')}.`}`;
+  });
+  const signed = mxToSign(r).filter(d => mxDocSign(r, d)?.st === 'signed').map(d => d.title.replace(/\.(docx?|pdf|txt|md)$/i, ''));
+  const declined = docs.filter(d => mxDocSign(r, d)?.st === 'declined' && !mxDocSign(r, d).e.ack).map(d => d.title.replace(/\.(docx?|pdf|txt|md)$/i, ''));
+  const left = mxToSign(r).filter(d => !mxDocLocked(r, d) && mxDocSign(r, d)?.st !== 'declined').map(d => d.title.replace(/\.(docx?|pdf|txt|md)$/i, ''));
+  const next = live.length ? (left.length ? ` Next: send ${left.join(' and ')}.` : ' Next: the remaining signatures.') : left.length ? ` Next: send ${left.join(' and ')} for signature.` : '';
+  return [...parts, signed.length ? `${signed.join(' and ')} ${signed.length > 1 ? 'are' : 'is'} signed.` : '', declined.length ? `${declined.join(' and ')} came back declined.` : ''].filter(Boolean).join(' ') + next;
 }
 
 function intakePage(r, opts = {}) {
@@ -1696,7 +1865,7 @@ function intakePage(r, opts = {}) {
   let tab = MX.intake.tab && ['summary', 'details', 'terms', 'sign', 'team', 'activity', 'docs', 'issues', 'comments'].includes(MX.intake.tab) ? MX.intake.tab : 'summary';
   /* the document whose round is open in the Documents tab, if any */
   let reviewing = MX.intake.review || null; MX.intake.review = null;
-  if ((tab === 'terms' && !hasTerms) || (tab === 'sign' && !(hasSign && INTAKE_FX.approvals)) || (tab === 'issues' && !hasIssues)) tab = 'summary';
+  if ((tab === 'terms' && !hasTerms) || (tab === 'sign' && !(hasSign && INTAKE_FX.approvals)) || (tab === 'issues' && !hasIssues) || (tab === 'signing' && !mxEnvelopes(r).length)) tab = 'summary';
   const ICON = (p, w = 16) => `<svg viewBox="0 0 24 24" width="${w}" height="${w}" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">${p}</svg>`;
 
   /* ── the left: a page about the request ── */
@@ -1740,10 +1909,17 @@ function intakePage(r, opts = {}) {
   const controls = h('div', { class: 'rqp-ctl' }, atty, sgOk);
 
   /* the tabs: one rule that travels under the one you are on */
-  const TABS = [['summary', 'Overview'], ['docs', 'Documents'], mxWComments(r).length && ['comments', 'Comments'], hasIssues && ['issues', 'Issues'], INTAKE_FX.approvals && hasSign && ['sign', mxApprovalRules(r).length ? 'Approvals' : 'Signatures'], ['details', 'Details'], hasTerms && ['terms', 'Key Terms'], ['team', 'Deal Team'], ['activity', 'Activity']].filter(Boolean);
+  /* Signatures joins once anything has been sent */
+  const tabList = () => [['summary', 'Overview'], ['docs', 'Documents'], mxEnvelopes(r).length && ['signing', 'Signatures'], mxWComments(r).length && ['comments', 'Comments'], hasIssues && ['issues', 'Issues'], INTAKE_FX.approvals && hasSign && ['sign', mxApprovalRules(r).length ? 'Approvals' : 'Signatures'], ['details', 'Details'], hasTerms && ['terms', 'Key Terms'], ['team', 'Deal Team'], ['activity', 'Activity']].filter(Boolean);
+  let TABS = tabList();
   const ink = h('span', { class: 'br-ink', 'aria-hidden': 'true' });
-  const tabBtns = TABS.map(([k, label]) => h('button', { class: 'br-tab', type: 'button', role: 'tab', 'data-k': k, onclick: () => setTab(k) },
-    label));
+  const tabBtn = ([k, label]) => h('button', { class: 'br-tab', type: 'button', role: 'tab', 'data-k': k, onclick: () => setTab(k) },
+    label);
+  let tabBtns = TABS.map(tabBtn);
+  /* the tabs again, when one joins (Signatures, after the first send) */
+  const paintTabs = () => { const next = tabList(); if (next.map(x => x[0]).join() === TABS.map(x => x[0]).join()) return;
+    TABS = next; tabBtns = TABS.map(tabBtn); tabs.replaceChildren(...tabBtns, ink);
+    for (const b of tabBtns) b.setAttribute('aria-selected', String(b.dataset.k === tab)); requestAnimationFrame(placeInk); };
   /* once the tabs hold at the top, the request's name shows quietly above them */
   const stuckName = h('div', { class: 'rqp-stuck-t', 'aria-hidden': 'true' });
   let aiFold = false;
@@ -1828,7 +2004,7 @@ function intakePage(r, opts = {}) {
   /* the values, drawn rather than typed out: a face, a ring, a mark */
   const who = (name, sub) => name ? h('span', { class: 'rqv-who' }, mxFace(name, 'pb-av rqv-av'), h('span', {}, name), sub ? h('span', { class: 'rqv-faint' }, sub) : null)
     : h('span', { class: 'rqv-none' }, 'Unassigned');
-  const stageVal = () => { const v = MX_ST.req[r.status] || MX_ST.req.progress; return h('span', { class: 'rqv-who' }, h('span', { class: 'rqv-ring mx-st-mi', style: `color:${v.color}`, html: v.svg }), v.label); };
+  const stageVal = () => { const v = MX_ST.req[r.status] || MX_ST.req.drafting; return h('span', { class: 'rqv-who' }, h('span', { class: 'rqv-ring mx-st-mi', style: `color:${v.color}`, html: v.svg }), mxStLabel(r, r.status)); };
   const priVal = () => h('span', { class: 'rqd-pri' + (r.urgent ? ' is-urgent' : '') }, r.urgent ? 'Urgent' : 'Normal');
   const dueVal = () => {
     if (!r.due) return null;
@@ -2114,6 +2290,77 @@ function intakePage(r, opts = {}) {
      path of marks. A row says who, why they are on it, where it stands;
      the one thing to do next (Approve, Remind, Sign) sits on the row, the
      rest in its ⋯. The section's own actions sit in its heading. */
+  /* everything on the page that reads the signing, painted again after any change to it */
+  const afterSign = () => { paintSteps(); stageBtn._paint?.(); paintSig(); paintTabs(); paintDoc(); paintBody(); };
+  /* a small form in a dialog: the fields, then one action */
+  const formDialog = ({ title, lead, fields, action, run }) => {
+    const vals = Object.fromEntries(fields.map(f => [f.k, f.value || '']));
+    const dim = h('div', { class: 'pb-dim mx-rqf-dim', onclick: (e) => { if (e.target === dim) close(); } });
+    const close = () => { dim.classList.add('is-closing'); setTimeout(() => dim.remove(), 150); removeEventListener('keydown', onKey, true); };
+    const onKey = (e) => { if (e.key === 'Escape') { e.stopPropagation(); close(); } };
+    const go = () => { if (fields.some(f => f.need && !String(vals[f.k]).trim())) { pbToast(`Add ${fields.find(f => f.need && !String(vals[f.k]).trim()).label.toLowerCase()}`); return; } close(); run(vals); };
+    dim.append(h('div', { class: 'pb-dlg mx-rqf mx-ss mx-ss-form', role: 'dialog', 'aria-modal': 'true', 'aria-label': title },
+      h('header', { class: 'mx-rqf-head mx-ss-head' }, h('div', {}, h('h2', { class: 'pb-dlg-t' }, title), lead ? h('p', { class: 'mx-ss-sub' }, lead) : null),
+        h('button', { class: 'pbv-icon mx-rqf-x', type: 'button', 'aria-label': 'Close', onclick: close, html: ICON('<path d="M6 6l12 12M18 6 6 18"/>', 14) })),
+      h('div', { class: 'mx-rqf-body mx-ss-bd' }, ...fields.map(f => h('label', { class: 'mx-rqf-f mx-ss-f' }, h('span', { class: 'mx-rqf-l' }, f.label),
+        f.long ? h('textarea', { class: 'mx-rqf-in mx-rqf-ta', rows: '3', oninput: (e) => { vals[f.k] = e.target.value; } }, f.value || '')
+          : h('input', { class: 'mx-rqf-in', type: f.type || 'text', value: f.value || '', oninput: (e) => { vals[f.k] = e.target.value; } })))),
+      h('footer', { class: 'mx-rqf-foot' }, h('button', { class: 'pb-btn', type: 'button', onclick: close }, 'Cancel'),
+        h('button', { class: 'pb-btn pb-btn--primary', type: 'button', onclick: go }, action))));
+    document.body.append(dim); addEventListener('keydown', onKey, true);
+    dim.querySelector('input,textarea')?.focus();
+  };
+  const voidEnv = (e, then) => pbConfirm({ title: 'Void this signature request?', lead: `${mxSignedBy(e)} are told it is cancelled, and ${e.docs.length > 1 ? 'the documents unlock' : 'the document unlocks'} for editing. Anything already signed on it no longer counts.`,
+    items: e.docs.map(y => ({ n: `v${y.v}`, t: (docs.find(d => d.id === y.doc)?.title || '').replace(/\.\w+$/, '') })), action: 'Void', run: () => { mxEnvVoid(r, e); afterSign(); pbToast('Signature request voided'); then?.(); } });
+  const changeSigner = (e, x) => formDialog({ title: 'Change signer', lead: `${x.who} has not signed yet. The new signer gets the request; ${x.who} is told it has moved.`,
+    fields: [{ k: 'name', label: 'Name', value: x.who, need: true }, { k: 'title', label: 'Title', value: x.title }, { k: 'email', label: 'Email', value: x.email, type: 'email', need: true }],
+    action: 'Change signer', run: (v) => { mxEnvChangeSigner(r, e, x, { name: v.name.trim(), title: v.title.trim(), email: v.email.trim() }); afterSign(); pbToast(`${v.name.trim()} will sign instead`); } });
+  const recordDecline = (e, x) => formDialog({ title: `${x.who} declined`, lead: 'The documents come back to negotiation and unlock.', fields: [{ k: 'why', label: 'Their reason', long: true }],
+    action: 'Record decline', run: (v) => { mxEnvDecline(r, e, x, v.why.trim()); afterSign(); pbToast(`${r.id} is back in negotiation`); } });
+  const sgDay = (iso) => new Date(iso).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
+  /* Signatures: one card per envelope, newest first */
+  const signing = () => {
+    const envs = [...mxEnvelopes(r)].reverse(), c = mxSignCount(r);
+    const left = docs.filter(d => mxDocRole(d) !== 'reference' && !mxDocLocked(r, d));
+    const card = (e) => {
+      const st = mxEnvState(e), live = ['out', 'partial', 'expired'].includes(st);
+      const dots = h('button', { class: 'br-dots rqs-env-dots', type: 'button', 'aria-label': 'More', 'data-tip': 'More', html: PB_SVG.dots });
+      dots.onclick = (ev) => { ev.stopPropagation(); mxGlyphs(); menu(dots, [
+        live && st !== 'expired' ? { label: 'Remind everyone who has not signed', icon: 'ask', run: () => { mxEnvRemind(r, e); afterSign(); pbToast('Reminder sent'); } } : null,
+        st === 'expired' ? { label: 'Resend', icon: 'retry', run: () => { mxEnvResend(r, e); afterSign(); pbToast('Sent again'); } } : null,
+        live ? { rule: true } : null,
+        live ? { label: 'Void', icon: 'trash', danger: true, run: () => voidEnv(e) } : null].filter(Boolean)); };
+      const signerRow = (x) => {
+        const say = x.state === 'signed' ? `Signed ${sgDay(x.at)}` : x.state === 'declined' ? `Declined ${sgDay(x.at)}` : !live ? 'Not signed' : x.reminded ? `Waiting · reminded ${sgDay(x.reminded)}` : 'Waiting to sign';
+        const b = h('button', { class: 'br-dots rqs-sg-dots', type: 'button', 'aria-label': `More for ${x.who}`, 'data-tip': 'More', html: PB_SVG.dots });
+        b.onclick = (ev) => { ev.stopPropagation(); mxGlyphs(); menu(b, [
+          { label: x.who === USER.name ? 'Sign now' : 'Record their signature', icon: 'use', run: () => { mxEnvSign(r, e, x); afterSign(); pbToast(e.state === 'signed' ? `Everyone has signed` : `${x.who === USER.name ? 'You have' : x.who + ' has'} signed`); } },
+          { label: 'Remind', icon: 'ask', run: () => { x.reminded = mxNow(); mxLog(r, { ev: 'email', what: `reminded ${x.who} to sign` }); afterSign(); pbToast(`Reminded ${x.who}`); } },
+          { label: 'Change signer', icon: 'rename', run: () => changeSigner(e, x) },
+          { rule: true },
+          { label: 'Record a decline', icon: 'trash', danger: true, run: () => recordDecline(e, x) }]); };
+        return h('div', { class: 'rqs-sg is-' + x.state }, mxFace(x.who, 'pb-av rqs-sg-av'),
+          h('span', { class: 'rqs-sg-t' }, h('b', {}, x.who), h('span', {}, [x.title, x.email].filter(Boolean).join(' · '))),
+          h('span', { class: 'rqs-sg-st' }, x.state === 'signed' ? h('span', { class: 'rqs-tick', html: ICON('<path d="m6 12.5 4 4 8-8.5"/>', 12) }) : null, say),
+          live && x.state !== 'signed' ? b : h('span', { class: 'rqs-sg-pad' }));
+      };
+      const stLabel = st === 'partial' ? `${e.signers.filter(x => x.state === 'signed').length} of ${e.signers.length} signed` : MX_SIGN_CHIP[st];
+      return h('section', { class: 'rqc rqs-env is-' + st },
+        h('header', { class: 'rqs-env-h' },
+          h('span', { class: `mx-sgc is-${st === 'partial' ? 'out' : st}` }, stLabel),
+          h('span', { class: 'rqs-env-when' }, `Sent ${sgDay(e.sent)}`, st === 'signed' ? ` · signed ${sgDay(e.ended)}` : ['voided', 'declined'].includes(st) ? ` · ${st} ${sgDay(e.ended)}` : st === 'expired' ? ` · expired ${sgDay(mxEnvEnds(e))}` : ` · expires ${sgDay(mxEnvEnds(e))}`),
+          h('span', { class: 'pb-grow' }), live ? dots : null),
+        h('div', { class: 'rqs-env-docs' }, ...e.docs.map(y => { const d = docs.find(z => z.id === y.doc); if (!d) return null;
+          return h('button', { class: 'rqs-env-doc', type: 'button', onclick: () => { openRef({ doc: d.id, v: y.v }); } }, mxTile('file', mxExt(d.title)), h('span', { class: 'rqs-env-doc-n' }, shortOf(d)),
+            mxDocRole(d) === 'attachment' ? h('span', { class: 'rqs-env-role' }, 'Attachment') : null, h('span', { class: 'rqs-env-v' }, `v${y.v}`)); })),
+        e.reason ? h('p', { class: 'rqs-env-why' }, `“${e.reason}”`) : null,
+        h('div', { class: 'rqs-env-sg' }, ...e.signers.map(signerRow)));
+    };
+    return [
+      h('div', { class: 'rqs-top' }, h('span', {}, c?.n ? `${c.signed} of ${c.n} ${c.n === 1 ? 'document' : 'documents'} signed` : 'Nothing to sign yet'),
+        left.length ? h('button', { class: 'pb-btn rqs-more', type: 'button', onclick: openSendSign }, 'Send for signature') : null),
+      ...envs.map(card)];
+  };
   const approvals = () => {
     const sg = mxSign(r), st = mxStages(r), sAt = st.indexOf('Signing'), last = st.length - 1;
     const d = docs.find(x => x.id === 'd1') || docs[0];
@@ -2359,7 +2606,7 @@ function intakePage(r, opts = {}) {
     };
     return [
       h('div', { class: 'rqp-people rqp-people--flat' }, ...list.map(p => h('div', { class: 'rqp-pc' }, mxFace(p.name, 'pb-av rqp-pc-av'),
-        h('span', { class: 'rqp-person-t' }, h('span', { class: 'rqp-pc-n' }, p.name), h('span', { class: 'rqp-pc-r' }, p.title)),
+        h('span', { class: 'rqp-person-t' }, h('span', { class: 'rqp-pc-n' }, p.name, mxEnvelopes(r).some(e => e.state !== 'voided' && e.signers.some(x => x.who === p.name)) ? h('span', { class: 'rqp-pc-signer' }, 'Signer') : null), h('span', { class: 'rqp-pc-r' }, p.title)),
         /* everything you do with a person, behind their dots */
         (() => {
           const b = h('button', { class: 'br-dots rqp-pc-dots', type: 'button', 'aria-label': `More for ${p.name}`, 'data-tip': 'More', html: PB_SVG.dots });
@@ -2386,12 +2633,18 @@ function intakePage(r, opts = {}) {
     b.onclick = (e) => {
       e.stopPropagation(); mxGlyphs();
       const name = d.title.replace(/\.(docx?|pdf|txt|md)$/i, '');
+      const sx = mxDocSign(r, d), live = sx && ['out', 'partial', 'expired'].includes(sx.st);
+      const role = mxDocRole(d), setRole = (k) => { d.role = k; save(); add({ what: `marked ${name} as ${MX_DOC_ROLE[k].toLowerCase()}` }); afterSign(); };
       menu(b, [
-        { label: 'Open in Word', html: '<img src="assets/brand/word.svg" alt="" width="16" height="16">', run: () => { openRef({ doc: d.id }); giveFile(); } },
-        { label: 'Download', icon: 'download', run: () => { openRef({ doc: d.id }); giveFile(); pbToast('Downloading'); } },
+        { label: mxDocLocked(r, d) ? 'Open in Word (read only)' : 'Open in Word', html: '<img src="assets/brand/word.svg" alt="" width="16" height="16">', run: () => { openRef({ doc: d.id }); giveFile(); } },
+        { label: sx?.st === 'signed' ? 'Download Signed Copy' : 'Download', icon: 'download', run: () => { openRef({ doc: d.id }); giveFile(); pbToast('Downloading'); } },
+        ...(live ? [{ label: 'Remind Signers', icon: 'ask', run: () => { mxEnvRemind(r, sx.e); afterSign(); pbToast('Reminder sent'); } },
+          { label: 'Void and Edit', icon: 'rename', run: () => voidEnv(sx.e) }] : []),
         { label: 'Upload a New Version', icon: 'retry', run: () => { openRef({ doc: d.id }); upload(false); } },
         { label: 'Compare', icon: 'compare', run: () => { openRef({ doc: d.id }); compareDialog(); } },
         { label: 'Rename', icon: 'rename', run: () => renameVersion(d, d === docs[di] ? vi : d.versions.length - 1) },
+        { rule: true },
+        ...Object.entries(MX_DOC_ROLE).map(([k, l]) => ({ label: k === 'sign' ? 'Document to sign' : k === 'attachment' ? 'Attachment, goes with it' : 'Reference, never sent', icon: 'files', tick: k === role, run: () => { if (k !== role) setRole(k); } })),
         { rule: true },
         { label: 'Delete Document', icon: 'trash', danger: true, run: () => pbConfirm({ title: `Delete ${name}?`, lead: `Every version of it goes from ${r.id}. The rest of the request stays.`,
           action: 'Delete', run: () => {
@@ -2522,7 +2775,7 @@ function intakePage(r, opts = {}) {
       ver.onclick = (e) => {
         e.stopPropagation();
         const side = (r.counterparty || 'their').split(/\s+/)[0];
-        const canReview = !d.versions[shown].cmp && shown > 0 && !(mxRounds(r).docs[d.id] || []).some(x => x.v === shown + 1);
+        const canReview = !mxDocLocked(r, d) && !d.versions[shown].cmp && shown > 0 && !(mxRounds(r).docs[d.id] || []).some(x => x.v === shown + 1);
         listFrom(ver, [
           ...d.versions.map((v, k) => k).reverse().map(k => [k === shown, h('span', { class: 'rqp-ver-v' }, `v${k + 1}`), d.versions[k].name + (k === d.versions.length - 1 ? ' · Latest' : ''),
             (() => { const n = (r.activity || []).filter(a => (a.kind === 'note' || a.kind === 'reply') && a.ref?.doc === d.id && a.ref?.v === k + 1).length; return `${pbWhen(d.versions[k].when)} · ${d.versions[k].by}${n ? ` · ${mxPlural(n, 'comment')}` : ''}`; })(),
@@ -2548,12 +2801,19 @@ function intakePage(r, opts = {}) {
         ((cs) => cs.length ? h('button', { class: 'rqp-dc-cmt is-ic', type: 'button', 'data-tip': `${mxPlural(cs.length, 'open comment')}`,
           onclick: (e) => { e.stopPropagation(); openCmts(d.id); } },
           h('span', { class: 'rqp-dc-cmt-ic', html: MX_TAB_ICONS.comments }), String(cs.length)) : null)(mxWComments(r).filter(c => c.doc === d.id && c.status !== 'closed')),
+        /* what kind of document it is, unless it is one to sign; and where its signing stands */
+        mxDocRole(d) !== 'sign' ? h('span', { class: 'rqp-dc-role' }, MX_DOC_ROLE[mxDocRole(d)]) : null,
+        mxDocChip(r, d),
         /* the negotiation word ("With Brightwell", "3 to answer"), off 15 Oct: rows show only the comment count */
         ((rs) => DOC_ROUND_CHIP && rs ? h('button', { class: 'rqp-dc-round is-' + rs.k, type: 'button', 'data-tip': 'Open the round',
           onclick: (e) => { e.stopPropagation(); openReview(d.id); } }, rs.say) : null)(mxRoundSay(r, d)),
         ver, docDots(d));
   };
-  const documents = () => reviewing && docs.some(x => x.id === reviewing) && mxRoundOf(r, reviewing) ? review(reviewing) : [
+  /* the other side's changes on a document out for signature are settled: they read, but do not change */
+  const reviewLocked = (id) => { const d = docs.find(x => x.id === id), rv = [].concat(review(id)).filter(Boolean);
+    return d && mxDocLocked(r, d) ? [h('p', { class: 'rqp-ro-note' }, h('span', { html: ICON('<rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/>', 13) }), `${shortOf(d)} is ${mxDocSign(r, d).st === 'signed' ? 'signed' : 'out for signature'}, so these answers are locked. Void the signature request to reopen them.`),
+      h('div', { class: 'rqp-ro' }, ...rv)] : rv; };
+  const documents = () => reviewing && docs.some(x => x.id === reviewing) && mxRoundOf(r, reviewing) ? reviewLocked(reviewing) : [
     docs.length ? h('div', { class: 'rqp-docs rqp-docs--flat' }, pendingCmp ? h('div', { class: 'rqp-dc is-pending', 'aria-busy': 'true' }, mxTile('file', 'docx'),
         h('span', { class: 'rqp-person-t' }, h('span', { class: 'rqp-pc-n' }, pendingCmp.name)),
         h('span', { class: 'rqp-dc-ring', 'aria-label': 'Comparing' })) : null, ...docs.map(docRow)) : h('p', { class: 'rqp-empty' }, 'No documents yet.'),
@@ -2727,7 +2987,7 @@ function intakePage(r, opts = {}) {
   const activity = () => { paintLog(); paintCtx(); return [composer, log]; };
 
   const paintBody = () => {
-    body.replaceChildren(...[].concat(tab === 'summary' ? summary() : tab === 'details' ? details() : tab === 'terms' ? terms() : tab === 'sign' ? approvals() : tab === 'team' ? team() : tab === 'docs' ? documents() : tab === 'comments' ? commentsTab() : tab === 'issues' ? issues() : activity()).filter(v => v != null && v !== false));
+    body.replaceChildren(...[].concat(tab === 'summary' ? summary() : tab === 'details' ? details() : tab === 'terms' ? terms() : tab === 'sign' ? approvals() : tab === 'signing' ? signing() : tab === 'team' ? team() : tab === 'docs' ? documents() : tab === 'comments' ? commentsTab() : tab === 'issues' ? issues() : activity()).filter(v => v != null && v !== false));
     body.dataset.tab = tab;
     dock.hidden = tab === 'activity' || tab === 'comments';
   };
@@ -2767,10 +3027,11 @@ function intakePage(r, opts = {}) {
   };
   const dock = h('div', { class: 'rqp-dock' }, h('div', { class: 'mt-ask rqp-ask-bar' }, h('span', { class: 'rqp-ask-ic', html: SPARK_ONE }), ask));
 
+  const markDone = () => mxUnsignedGate(r, 'done', () => { r.status = 'done'; r.updated = mxNow(); save(); add({ ev: 'status', what: `moved this to ${mxStLabel(r, 'done')}` }); mxClose('intake'); go('intake'); pbToast(`${r.id} is ${mxStLabel(r, 'done').toLowerCase()}`); });
   const more = h('button', { class: 'br-dots', type: 'button', 'aria-label': 'More actions', 'data-tip': 'More Actions', html: PB_SVG.dots,
     onclick: (e) => { e.stopPropagation(); mxGlyphs(); menu(more, [
       ...(INTAKE_FX.channel && r.submitter !== USER.name ? [{ label: `Message ${first}`, icon: 'ask', run: () => messageRequester() }] : []),
-      !mxClosed(r) ? { label: 'Mark as Completed', icon: 'use', run: () => { r.status = 'done'; r.updated = mxNow(); save(); add({ ev: 'status', what: 'moved this to Completed' }); mxClose('intake'); go('intake'); pbToast(`${r.id} is completed`); } } : null,
+      !mxClosed(r) ? { label: `Mark as ${mxStLabel(r, 'done')}`, icon: 'use', run: () => markDone() } : null,
       ...(INTAKE_FX.portal ? [{ label: 'Open Requester View', icon: 'open', run: () => { MX.intake.open = r.id + '/requester'; go('intake'); } }] : []),
       { label: 'Share', icon: 'share', run: () => { navigator.clipboard?.writeText(location.href).catch(() => {}); pbToast('Link copied. Anyone in legal can open it.'); } },
       { label: 'Copy Link', icon: 'copy', run: () => { navigator.clipboard?.writeText(location.href).catch(() => {}); pbToast('Link copied'); } },
@@ -2779,6 +3040,12 @@ function intakePage(r, opts = {}) {
         action: 'Delete', run: () => { const l = mxIntake(); l.splice(l.indexOf(r), 1); save(); mxClose('intake'); go('intake'); pbToast(`${r.id} deleted`); } }) },
     ]); } });
 
+  /* always there beside the status, quieter than it: the modal says what goes and who signs */
+  /* once nothing is left to send, the same place shows how the signing is going */
+  const sigBtn = h('button', { class: 'rqp-sig', type: 'button' });
+  const allOut = () => mxEnvelopes(r).length > 0 && !docs.some(d => mxDocRole(d) !== 'reference' && !mxDocLocked(r, d));
+  const paintSig = () => sigBtn.replaceChildren(h('span', { class: 'rqp-sig-ic', html: ICON('<path d="M4 20h4L19 9l-4-4L4 16z"/><path d="m13.5 6.5 4 4"/>', 14) }), allOut() ? 'Signing status' : 'Send for signature');
+  paintSig();
   const docOpen = h('button', { class: 'br-pane rqp-doc-open', type: 'button', 'data-tip': 'Show document', 'aria-label': 'Show document' },
     h('span', { class: 'br-pane-ic', html: ICON('<path d="M14 3.5H7A1.5 1.5 0 0 0 5.5 5v14A1.5 1.5 0 0 0 7 20.5h10a1.5 1.5 0 0 0 1.5-1.5V8z"/><path d="M14 3.5V8h4.5"/><path d="M8.5 13h7M8.5 16.5h4.5"/>', 16) }));
   const left = h('div', { class: 'rqp-left' }, h('div', { class: 'br-panes rqp-panes' }, docOpen),
@@ -2786,7 +3053,7 @@ function intakePage(r, opts = {}) {
       h('div', { class: 'br-top' },
         embed ? h('span', {}) : h('button', { class: 'br-back', type: 'button', onclick: () => { mxClose('intake'); go('intake'); } },
           h('span', { class: 'br-back-a', html: ICON('<path d="M19 12H5M11 6l-6 6 6 6"/>', 15) }), INTAKE_NAME),
-        h('div', { class: 'br-top-r' }, stageBtn, more)),
+        h('div', { class: 'br-top-r' }, sigBtn, stageBtn, more)),
       title, meta, controls, tabs, body),
     dock);
   /* once the tabs are holding at the top, a soft edge keeps what slides under from merging into them */
@@ -2802,8 +3069,33 @@ function intakePage(r, opts = {}) {
   const docBtn = h('button', { class: 'rqp-docsw', type: 'button', 'aria-haspopup': 'listbox' });
   const verBtn = h('button', { class: 'rqp-ver', type: 'button', 'aria-haspopup': 'listbox' });
   const banner = h('div', { class: 'rqp-old' });
+  /* the document's signing, across the top of it: out, signed or declined, with what can be done */
+  const signBar = h('div', { class: 'rqp-sgbar' });
+  const paintSignBar = (d, v) => {
+    const x = mxDocSign(r, d), st = x?.st;
+    signBar.hidden = !x || st === 'voided' || (st === 'declined' && x.e.ack);
+    if (signBar.hidden) return;
+    const e = x.e, waiting = e.signers.filter(y => y.state !== 'signed'), done = e.signers.filter(y => y.state === 'signed');
+    const btn = (t, run, cls = '') => h('button', { class: 'rqp-sgbar-b ' + cls, type: 'button', onclick: run }, t);
+    const pen = h('span', { class: 'rqp-sgbar-ic', html: ICON(st === 'signed' ? '<path d="m6 12.5 4 4 8-8.5"/>' : st === 'declined' ? '<path d="M7 7l10 10M17 7 7 17"/>' : '<path d="M4 20h4L19 9l-4-4L4 16z"/><path d="m13.5 6.5 4 4"/>', 14) });
+    signBar.className = 'rqp-sgbar is-' + (st === 'partial' || st === 'expired' ? 'out' : st);
+    if (st === 'signed') signBar.replaceChildren(pen, h('span', { class: 'rqp-sgbar-t' }, `Signed by ${e.signers.length === 2 ? 'both parties' : mxSignedBy(e)} on ${sgDay(e.ended || e.signers[e.signers.length - 1].at)}.`,
+      v.signedCopy ? '' : ' '), v.signedCopy ? '' : btn('Open the signed copy', () => { vi = d.versions.length - 1; paintDoc(); }));
+    else if (st === 'declined') { const who = e.signers.find(y => y.state === 'declined');
+      signBar.replaceChildren(pen, h('span', { class: 'rqp-sgbar-t' }, `${who?.who || 'A signer'} declined to sign on ${sgDay(e.ended)}`, e.reason ? `: “${e.reason}”` : '.'),
+        btn('Back to negotiation', () => { e.ack = true; if (r.status !== 'negotiation' && !mxClosed(r)) { r.status = 'negotiation'; mxLog(r, { ev: 'status', what: 'moved this to Negotiation' }); } save(); afterSign(); })); }
+    else {
+      const on = vi + 1 === x.v;
+      signBar.replaceChildren(pen, h('span', { class: 'rqp-sgbar-t' },
+        on ? `${st === 'expired' ? 'Expired' : 'Out for signature since'} ${st === 'expired' ? 'on ' + sgDay(mxEnvEnds(e)) : sgDay(e.sent)}${done.length ? ` · ${done.map(y => y.who).join(' and ')} signed` : ''}${waiting.length ? ` · waiting on ${waiting.map(y => y.who).join(' and ')}` : ''}`
+          : `v${x.v} is the version out for signature.`),
+        ...(on ? [st === 'expired' ? btn('Resend', () => { mxEnvResend(r, e); afterSign(); pbToast('Sent again'); }) : btn('Remind', () => { mxEnvRemind(r, e); afterSign(); pbToast('Reminder sent'); }),
+          btn('Void and edit', () => voidEnv(e))]
+          : [btn(`Open v${x.v}`, () => { vi = x.v - 1; paintDoc(); })]));
+    }
+  };
   const cmpBar = h('div', { class: 'rqp-cmp', hidden: true });
-  const scroll = h('div', { class: 'rqp-scroll' }, cmpBar, banner, page);
+  const scroll = h('div', { class: 'rqp-scroll' }, cmpBar, signBar, banner, page);
   const latestIn = (d) => d.versions.length - 1;
   const titleOf = (d) => d.title.replace(/\.(docx?|pdf|txt|md)$/i, '');
   /* inside a request about one company, its name is not repeated at the front of every document */
@@ -3036,7 +3328,8 @@ function intakePage(r, opts = {}) {
       h('span', { class: 'rqp-ver-c', html: ICON('<path d="m7 10 5 5 5-5"/>', 13) }));
     verBtn.replaceChildren(`v${vi + 1}`, h('span', { class: 'rqp-ver-c', html: ICON('<path d="m7 10 5 5 5-5"/>', 12) }));
     verBtn.title = `${v.name} · ${v.by}`;
-    banner.hidden = vi === latestIn(d);
+    paintSignBar(d, v);
+    banner.hidden = vi === latestIn(d) || (!signBar.hidden && !!mxDocSign(r, d));
     banner.replaceChildren(h('span', {}, `You are looking at v${vi + 1}, ${v.name.toLowerCase()}.`),
       h('button', { class: 'mx-link', type: 'button', onclick: () => { vi = latestIn(d); paintDoc(); } }, `Back to v${d.versions.length}`));
     if (pdfUrl) { URL.revokeObjectURL(pdfUrl); pdfUrl = null; }
@@ -3056,7 +3349,7 @@ function intakePage(r, opts = {}) {
       page.replaceChildren(...(v.blocks || []).map(b => h({ h1: 'h1', h2: 'h2', p: 'p', meta: 'p' }[b.t] || 'p', { class: { h1: 'doc-h1', h2: 'doc-h2', p: 'doc-p', meta: 'doc-meta rqp-meta-line' }[b.t] || 'doc-p', html: b.v })));
     }
     /* the latest version is edited right here, like a document; older versions and comparisons only read */
-    const editable = vi === latestIn(d) && !v.pdf && !v.none && !v.cmp;
+    const editable = vi === latestIn(d) && !v.pdf && !v.none && !v.cmp && !mxDocLocked(r, d);
     page.contentEditable = editable ? 'true' : 'false'; page.spellcheck = editable;
     page.classList.toggle('is-editable', editable);
     scroll.scrollTop = 0;
@@ -3127,19 +3420,151 @@ function intakePage(r, opts = {}) {
     function shut() { pop.remove(); removeEventListener('mousedown', out, true); removeEventListener('keydown', esc, true); }
     addEventListener('mousedown', out, true); addEventListener('keydown', esc, true);
   };
+  /* Send for signature, from the header: which documents at which versions,
+     and who signs on each side, each signer checked or corrected in place */
+  /* a sent document takes no new version: void the request first, or wait for the signatures */
+  const lockedSay = (d) => { const x = mxDocSign(r, d);
+    if (x.st === 'signed') return pbToast(`${shortOf(d)} is signed. Add a new document instead.`);
+    pbConfirm({ title: `${shortOf(d)} is out for signature`, lead: `Signers sign exactly v${x.v}. To change it, void the signature request first: ${mxSignedBy(x.e)} are told, and the document unlocks.`,
+      action: 'Void and edit', run: () => { mxEnvVoid(r, x.e); afterSign(); pbToast('Voided. You can edit it now.'); } }); };
+  const openSendSign = () => {
+    const sg = mxSign(r);
+    /* what can go: anything not a reference and not already out or signed. Every such document is
+       in the list at its latest version unless taken off; anything taken off can be added back */
+    const sendable = (d) => mxDocRole(d) !== 'reference' && !mxDocLocked(r, d);
+    const sent = docs.filter(d => mxDocLocked(r, d));
+    const rows = docs.filter(sendable).map(d => ({ id: d.id, k: d.versions.length - 1 }));
+    const docOf = (row) => docs.find(d => d.id === row.id);
+    const chosen = () => rows;
+    const spare = () => docs.filter(d => sendable(d) && !rows.some(x => x.id === d.id));
+    const nVer = (d) => `${d.versions.length} ${d.versions.length === 1 ? 'version' : 'versions'}${mxDocRole(d) === 'attachment' ? ' · Attachment' : ''}`;
+    const tileOf = (d) => mxTile('file', mxExt(d.versions[d.versions.length - 1]?.file || d.title));
+    /* the signers: whoever signed the last envelope, else the request's own */
+    const lastEnv = mxEnvelopes(r)[mxEnvelopes(r).length - 1];
+    const lastOf = (side) => lastEnv?.signers.find(x => x.side === side);
+    const ours = lastOf('us')?.who || sg?.signers.find(x => /for us|notice/i.test(x.what))?.who || USER.name;
+    const contact = mxPeople(r).find(p => p.side === 'counterparty');
+    const theirs = lastOf('them')?.who || sg?.signers.find(x => !/for us|notice/i.test(x.what))?.who || contact?.name || '';
+    const ourP = MX_LEGAL.concat(MX_STAFF).find(p => p.name === ours);
+    const signers = [
+      { co: 'Lumen Analytics Ltd', side: 'Provider', from: lastOf('us') ? 'From the last envelope' : 'From past agreements', name: ours, title: lastOf('us')?.title || (ourP?.role || '').split(' · ')[0], email: lastOf('us')?.email || (ours === USER.name ? USER.email : mxEmail(ours)) },
+      ...(mxPipe(r) === 'notice' ? [] : [{ co: r.counterparty || 'Counterparty', side: 'Counterparty', from: lastOf('them') ? 'From the last envelope' : contact ? 'From CRM' : 'Not on file', them: true,
+        name: theirs, title: lastOf('them')?.title || (contact?.name === theirs ? (contact.role || '').split(' · ')[0] : ''), email: lastOf('them')?.email || (contact?.name === theirs ? contact.email || '' : '') }]),
+    ];
+    let editing = signers.find(s => !s.name || !s.email) || null;
+    const dim = h('div', { class: 'pb-dim mx-rqf-dim', onclick: (e) => { if (e.target === dim) close(); } });
+    const close = () => { dim.classList.add('is-closing'); setTimeout(() => dim.remove(), 150); removeEventListener('keydown', onKey, true); };
+    const onKey = (e) => { if (e.key === 'Escape' && !document.querySelector('.mx-tpk')) { e.stopPropagation(); close(); } };
+    const dlg = h('div', { class: 'pb-dlg mx-rqf mx-ss', role: 'dialog', 'aria-modal': 'true', 'aria-label': 'Send for signature' });
+    dim.append(dlg);
+    const verPick = (btn, row) => listFrom(btn, docOf(row).versions.map((v, k) => [row.k === k, h('span', { class: 'mx-cmp-v' }, `v${k + 1}`), v.name, `${v.by || ''}${v.when ? ' · ' + new Date(v.when).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }) : ''}`,
+      () => { row.k = k; paint(); }]).reverse());
+    /* a list hung from a row, as wide as the box it belongs to */
+    const widen = (btn) => { const pop = document.querySelector('.mx-tpk'), box = btn.closest('.mx-ss-sec')?.querySelector('.mx-ss-box') || btn; if (!pop) return; pop.classList.add('mx-ss-list');
+      const rr = (btn.closest('.mx-ss-doc-r') || box).getBoundingClientRect(), bw = box.getBoundingClientRect(); pop.style.setProperty('--ss-w', bw.width + 'px'); pop.style.left = bw.left + 'px'; pop.style.top = (rr.bottom + 4) + 'px'; };
+    /* the chevron: swap this row for a document that is not in the list yet */
+    const docPick = (btn, row) => {
+      listFrom(btn, [docOf(row), ...spare()].map(d => [d.id === row.id, tileOf(d), titleOf(d), nVer(d), () => { if (d.id !== row.id) { row.id = d.id; row.k = d.versions.length - 1; paint(); } }]));
+      widen(btn);
+    };
+    const addDoc = (btn) => {
+      listFrom(btn, spare().map(d => [false, tileOf(d), titleOf(d), nVer(d), () => { rows.push({ id: d.id, k: d.versions.length - 1 }); paint(); }]));
+      widen(btn);
+    };
+    const docRow = (row) => {
+      const d = docOf(row);
+      return h('div', { class: 'mx-ss-doc is-on' },
+        h('div', { class: 'mx-ss-doc-r' },
+          tileOf(d),
+          h('button', { class: 'mx-ss-pick', type: 'button', 'aria-haspopup': 'listbox', 'data-tip': spare().length ? 'Choose another document' : null, disabled: !spare().length,
+            onclick: (e) => { e.stopPropagation(); docPick(e.currentTarget, row); } },
+            h('span', { class: 'mx-ss-doc-n' }, titleOf(d)), spare().length ? h('span', { class: 'mx-ss-more', html: ICON('<path d="m7 10 5 5 5-5"/>', 14) }) : null),
+          h('button', { class: 'mx-ss-ver', type: 'button', 'data-tip': 'Choose the version to send', onclick: (e) => { e.stopPropagation(); verPick(e.currentTarget, row); } },
+            `v${row.k + 1}`, h('span', { html: ICON('<path d="m7 10 5 5 5-5"/>', 12) })),
+          h('button', { class: 'mx-ss-del', type: 'button', 'data-tip': 'Remove', 'aria-label': `Remove ${titleOf(d)}`,
+            html: ICON('<path d="M5 7h14M10 7V5h4v2M7 7l1 12h8l1-12"/>', 15), onclick: () => { rows.splice(rows.indexOf(row), 1); paint(); } })));
+    };
+    const field = (s, k, label, type = 'text') => h('label', { class: 'mx-rqf-f mx-ss-f' }, h('span', { class: 'mx-rqf-l' }, label),
+      h('input', { class: 'mx-rqf-in', type, value: s[k], autocomplete: 'off', oninput: (e) => { s[k] = e.target.value; paintFoot(); } }));
+    const signerRow = (s) => h('div', { class: 'mx-ss-sg' + (editing === s ? ' is-edit' : '') },
+      h('div', { class: 'mx-ss-sg-h' }, h('span', {}, `${s.co} · ${s.side}`), h('span', {}, s.from)),
+      editing === s
+        ? h('div', { class: 'mx-ss-sg-form' }, field(s, 'name', 'Name'), field(s, 'title', 'Title'), field(s, 'email', 'Email', 'email'),
+            h('div', { class: 'mx-ss-sg-done' }, h('button', { class: 'pb-btn', type: 'button', onclick: () => { s.name = s.name.trim(); s.email = s.email.trim(); s.title = s.title.trim();
+              if (!s.name || !/^\S+@\S+\.\S+$/.test(s.email)) { pbToast(!s.name ? 'Add a name' : 'Add an email address'); return; } editing = null; paint(); } }, 'Done')))
+        : h('div', { class: 'mx-ss-sg-b' },
+            h('div', { class: 'mx-ss-sg-who' }, h('b', {}, s.name), s.title ? h('span', {}, s.title) : null, h('span', {}, s.email)),
+            h('button', { class: 'pb-btn mx-ss-edit', type: 'button', disabled: !!editing, onclick: () => { editing = s; paint(); } },
+              h('span', { html: ICON('<path d="M4 20h4L19 9l-4-4L4 16z"/><path d="m13.5 6.5 4 4"/>', 14) }), 'Edit')));
+    const foot = h('footer', { class: 'mx-rqf-foot mx-ss-foot' });
+    const paintFoot = () => {
+      const n = chosen().length;
+      const why = !n ? (!docs.some(sendable) ? 'Nothing left to send' : 'Add at least one document') : editing ? `Finish ${editing.co}’s signer` : '';
+      foot.replaceChildren(h('span', { class: 'mx-ss-why' }, why),
+        h('button', { class: 'pb-btn', type: 'button', onclick: close }, 'Cancel'),
+        h('button', { class: 'pb-btn pb-btn--primary', type: 'button', disabled: !!why, onclick: send }, `Send ${n || ''} for signature`.replace('  ', ' ')));
+    };
+    const paint = () => {
+      const n = chosen().length;
+      dlg.replaceChildren(
+        h('header', { class: 'mx-rqf-head mx-ss-head' }, h('div', {}, h('h2', { class: 'pb-dlg-t' }, 'Send for signature'), h('p', { class: 'mx-ss-sub' }, r.counterparty || r.title)),
+          h('button', { class: 'pbv-icon mx-rqf-x', type: 'button', 'aria-label': 'Close', onclick: close, html: ICON('<path d="M6 6l12 12M18 6 6 18"/>', 14) })),
+        h('div', { class: 'mx-rqf-body mx-ss-bd' },
+          h('div', { class: 'mx-ss-sec' },
+            h('div', { class: 'mx-ss-l' }, h('span', {}, 'Documents to send', n ? [' · ', h('b', {}, String(n))] : null)),
+            !docs.length ? h('p', { class: 'mx-ss-none' }, 'This request has no documents yet. Add one from the Documents tab.')
+            : !rows.length && !spare().length ? h('p', { class: 'mx-ss-none' }, 'Every document is out for signature or signed. To change one, void it from the Signatures tab.')
+            : h('div', { class: 'mx-ss-box' }, ...rows.map(docRow),
+                spare().length ? h('button', { class: 'mx-ss-add', type: 'button', onclick: (e) => { e.stopPropagation(); addDoc(e.currentTarget); } },
+                  h('span', { html: ICON('<path d="M12 6v12M6 12h12"/>', 15) }), 'Add document') : null)),
+          /* what is already out, said and locked: it is not sent twice */
+          sent.length ? h('div', { class: 'mx-ss-sec' }, h('div', { class: 'mx-ss-l' }, h('span', {}, 'Already sent')),
+            h('div', { class: 'mx-ss-box mx-ss-box--sent' }, ...sent.map(d => { const x = mxDocSign(r, d); return h('div', { class: 'mx-ss-doc' }, h('div', { class: 'mx-ss-doc-r' },
+              tileOf(d), h('span', { class: 'mx-ss-doc-n' }, titleOf(d)), h('span', { class: 'mx-ss-sent-v' }, `v${x.v}`), mxDocChip(r, d), h('span', { class: 'mx-ss-lock', 'data-tip': 'Locked while out for signature', html: ICON('<rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/>', 14) }))); }))) : null,
+          h('div', { class: 'mx-ss-sec' }, h('div', { class: 'mx-ss-l' }, h('span', {}, 'Signers')), h('div', { class: 'mx-ss-box' }, ...signers.map(signerRow)))),
+        foot);
+      paintFoot();
+      dlg.querySelector('.mx-ss-sg.is-edit input')?.focus();
+    };
+    function send() {
+      const items = chosen().map(x => ({ d: docOf(x), k: x.k })).filter(x => x.d);
+      const go = () => {
+        const them = signers.find(s => s.them), p = them && mxPeople(r).find(q => q.side === 'counterparty' && q.name === them.name);
+        if (p) { p.email = them.email; if (them.title) p.role = them.title; }
+        mxEnvSend(r, items, signers);
+        paintSteps(); stageBtn._paint?.(); paintSig(); paintTabs();
+        close(); paintDoc(); paintBody(); pbToast(items.length > 1 ? `${items.length} documents sent for signature` : 'Sent for signature');
+      };
+      /* anything still open on what is going: comments, or the other side's changes not yet answered */
+      const loose = items.flatMap(({ d }) => {
+        const c = mxWComments(r).filter(x => x.doc === d.id && x.status !== 'closed').length;
+        const rd = mxRoundOf(r, d.id), q = rd && !rd.answered ? (rd.points || []).filter(p => !p.decision).length : 0;
+        return c || q ? [{ n: shortOf(d), t: [c && mxPlural(c, 'open comment'), q && `${q} of their changes to answer`].filter(Boolean).join(' · ') }] : [];
+      });
+      const wait = INTAKE_FX.approvals ? mxSignWaiting(r) : [];
+      const askLoose = () => loose.length ? pbConfirm({ title: 'Some of this is still open', lead: `Signers sign exactly what is sent. ${loose.length === 1 ? 'This document has' : 'These documents have'} open points.`,
+        items: loose, action: 'Send anyway', run: go }) : go();
+      if (wait.length) pbConfirm({ title: 'Approvals are still waiting', lead: `${r.id} should go for signature once ${wait.length === 1 ? 'this is' : 'these are'} in.`,
+        items: wait.map(x => ({ n: x.who || 'Not assigned', t: x.what })), action: 'Send anyway', run: askLoose });
+      else askLoose();
+    }
+    paint();
+    document.body.append(dim); addEventListener('keydown', onKey, true);
+  };
+  sigBtn.onclick = () => allOut() ? setTab('signing') : openSendSign();
   docBtn.onclick = (e) => {
     e.stopPropagation();
     const d = docs[di];
     void d;
     listFrom(docBtn, [
-      ...docs.map((x, i) => [i === di, mxTile('file', mxExt(x.title)), shortOf(x), `v${x.versions.length} · ${pbWhen(x.versions[latestIn(x)].when)}`, () => { di = i; vi = latestIn(x); paintDoc(); }]),
+      ...docs.map((x, i) => [i === di, mxTile('file', mxExt(x.title)), shortOf(x), `v${x.versions.length} · ${pbWhen(x.versions[latestIn(x)].when)}${((z) => !z || z.st === 'voided' ? '' : ' · ' + (z.st === 'partial' ? `${z.ns} of ${z.n} signed` : MX_SIGN_CHIP[z.st]))(mxDocSign(r, x))}`, () => { di = i; vi = latestIn(x); paintDoc(); }]),
       [false, h('span', { class: 'rqp-ver-add rqp-ver-add--doc', html: ICON('<path d="M12 6v12M6 12h12"/>', 13) }), 'Add another document', 'Word, PDF or text', () => upload(true)]]);
   };
   verBtn.onclick = (e) => {
     e.stopPropagation();
     const d = docs[di];
     listFrom(verBtn, [
-      ...d.versions.map((v, i) => i).reverse().map(i => [i === vi, h('span', { class: 'rqp-ver-v' }, `v${i + 1}`), d.versions[i].name + (i === latestIn(d) ? ' · Latest' : ''), (() => { const n = (r.activity || []).filter(a => (a.kind === 'note' || a.kind === 'reply') && a.ref?.doc === d.id && a.ref?.v === i + 1).length; return `${pbWhen(d.versions[i].when)} · ${d.versions[i].by}${n ? ` · ${mxPlural(n, 'comment')}` : ''}`; })(), () => { vi = i; paintDoc(); }]),
+      ...d.versions.map((v, i) => i).reverse().map(i => [i === vi, h('span', { class: 'rqp-ver-v' + (mxDocSign(r, d)?.v === i + 1 && mxDocSign(r, d).st !== 'voided' ? ' is-sent' : '') }, `v${i + 1}`, mxDocSign(r, d)?.v === i + 1 && mxDocSign(r, d).st !== 'voided' ? h('span', { class: 'rqp-ver-pen', html: ICON('<path d="M4 20h4L19 9l-4-4L4 16z"/>', 10) }) : null), d.versions[i].name + (i === latestIn(d) ? ' · Latest' : ''), (() => { const n = (r.activity || []).filter(a => (a.kind === 'note' || a.kind === 'reply') && a.ref?.doc === d.id && a.ref?.v === i + 1).length; const sent = mxDocSign(r, d)?.v === i + 1 && mxDocSign(r, d).st !== 'voided'; return `${sent ? 'Sent for signature · ' : ''}${pbWhen(d.versions[i].when)} · ${d.versions[i].by}${n ? ` · ${mxPlural(n, 'comment')}` : ''}`; })(), () => { vi = i; paintDoc(); }]),
       h('div', { class: 'rqp-vers-rule' }),
       [false, h('span', { class: 'rqp-ver-add', html: ICON('<path d="M12 6v12M6 12h12"/>', 13) }), 'Upload a New Version', '', () => upload(false)],
       [false, h('span', { class: 'rqp-ver-add', html: ICON('<path d="M7 4v16M7 20l-3-3M7 20l3-3M17 20V4M17 4l-3 3M17 4l3 3"/>', 13) }), 'Compare', '', () => compareDialog()]]);
@@ -3147,6 +3572,7 @@ function intakePage(r, opts = {}) {
 
   /* a file in: a new version of the document open, or a document of its own */
   upload = (asNew) => {
+    if (!asNew && docs[di] && mxDocLocked(r, docs[di])) return lockedSay(docs[di]);
     const pick = h('input', { type: 'file', accept: '.docx,.doc,.pdf,.txt,.md,.rtf', style: 'display:none', onchange: async () => {
       const f = pick.files?.[0]; pick.remove(); if (!f) return;
       takeFile(f, !asNew && docs.length ? docs[di] : null);
@@ -3155,6 +3581,7 @@ function intakePage(r, opts = {}) {
   };
   /* a file arrives — picked, or dropped: onto a document it is that document's next version, anywhere else a new document */
   const takeFile = (f, target) => {
+    if (target && mxDocLocked(r, target)) return lockedSay(target);
       /* before it goes in: what changed, in a line, for whoever opens it next */
       uploadNote(f, target, async (note, theirs, vname) => {
         pbToast(`Reading ${f.name}…`);
@@ -4068,8 +4495,8 @@ function intakeView() {
       { key: 'source', label: 'Source', of: (r) => r.source ? mxChannel(r).name : 'Manual',
         mark: (v) => { const id = Object.keys(MX_CHANNEL_NAME).find(k => MX_CHANNEL_NAME[k] === v);
           return id ? h('img', { class: 'mx-fpop-av mx-fpop-logo', src: brandSrc(id), alt: '' }) : h('span', { class: 'mx-fpop-av mx-dlg-q' }, quillEl('static', { cls: 'mx-dlg-qi' })); } },
-      { key: 'stage', label: 'Status', of: (r) => (MX_ST.req[r.status] || MX_ST.req.progress).label, order: (v) => Object.values(MX_ST.req).map(x => x.label).indexOf(v),
-        mark: (v) => { const k = Object.keys(MX_ST.req).find(k => MX_ST.req[k].label === v); return k ? h('span', { class: 'mx-st-mi mx-fpop-st', style: `color:${MX_ST.req[k].color}`, html: MX_ST.req[k].svg }) : null; } },
+      { key: 'stage', label: 'Status', of: (r) => mxStLabel(r, r.status), order: (v) => Object.values(MX_ST.req).map(x => x.label).indexOf(/^(Answered|Sent)$/.test(v) ? 'Signed' : v) + (/^(Answered|Sent)$/.test(v) ? .5 : 0),
+        mark: (v) => { const k = /^(Answered|Sent)$/.test(v) ? 'done' : Object.keys(MX_ST.req).find(k => MX_ST.req[k].label === v); return k ? h('span', { class: 'mx-st-mi mx-fpop-st', style: `color:${MX_ST.req[k].color}`, html: MX_ST.req[k].svg }) : null; } },
       ...(INTAKE_FX.dueCol ? [
         mxDueFilter(),
         { key: 'move', label: 'Waiting on', of: (r) => mxWhoseMove(r), order: (v) => ['Legal', 'Requester', 'Counterparty'].indexOf(v) }] : []),
@@ -4096,7 +4523,9 @@ function intakeView() {
     cells: (r) => INTAKE_FX.columns === 'v2' ? [
       h('span', { class: 'mx-req-id' }, r.id),
       h('span', { class: 'pb-row-name' }, r.title),
-      mxReqStatusBtn(r, () => setTimeout(t.paint, 420)),
+      /* the status, and once anything is out, how much of it is signed */
+      ((c) => c && c.n && c.signed < c.n && !mxClosed(r) ? h('span', { class: 'mx-st-cell' }, mxReqStatusBtn(r, () => setTimeout(t.paint, 420)), h('span', { class: 'mx-st-count', 'data-tip': `${c.signed} of ${c.n} documents signed` }, `${c.signed}/${c.n} signed`))
+        : mxReqStatusBtn(r, () => setTimeout(t.paint, 420)))(mxSignCount(r)),
       mxAttorneyBtn(r, () => setTimeout(t.paint, 420)),
       h('span', { class: 'mx-dlg' }, mxFace(r.submitter, 'pb-av mx-sb-av'), r.submitter),
       h('span', { class: 'mx-created' }, new Date(r.created).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })),
@@ -4124,8 +4553,8 @@ function intakeView() {
       { label: 'Open', icon: 'files', run: () => mxOpen('intake', r.id) },
       ...(INTAKE_FX.following && r.attorney !== USER.name ? [{ label: r.followed ? 'Unfollow' : 'Follow', icon: 'look', run: () => { r.followed = !r.followed; save(); t.paint();
         pbToast(r.followed ? `Following ${r.id}` : `Stopped following ${r.id}`, { label: 'Undo', run: () => { r.followed = !r.followed; save(); t.paint(); } }); } }] : []),
-      { label: 'Mark as Completed', icon: 'use', run: () => { const was = r.status; r.status = 'done'; r.updated = mxNow(); save(); mxLog(r, { ev: 'status', what: 'moved this to Completed' }); t.paint();
-        pbToast(`${r.id} is completed`, { label: 'Undo', run: () => { r.status = was; save(); t.paint(); } }); } },
+      { label: `Mark as ${mxStLabel(r, 'done')}`, icon: 'use', run: () => mxUnsignedGate(r, 'done', () => { const was = r.status; r.status = 'done'; r.updated = mxNow(); save(); mxLog(r, { ev: 'status', what: `moved this to ${mxStLabel(r, 'done')}` }); t.paint();
+        pbToast(`${r.id} is ${mxStLabel(r, 'done').toLowerCase()}`, { label: 'Undo', run: () => { r.status = was; save(); t.paint(); } }); }) },
       { rule: true },
       { label: 'Delete', icon: 'trash', danger: true, run: () => mxRemove(list, r, row, 'request', (back) => back && t.paint()) },
     ],
@@ -4185,7 +4614,7 @@ function projectPage(p) {
     ...p.chats.map(c => ({ id: 'chat:' + c.id, type: 'chat', name: c.title, about: c.by.split(' ')[0] + ' asked', updated: c.when, ref: c })),
     ...p.vaults.map(id => mxVault(id)).filter(Boolean).map(v => ({ id: 'vault:' + v.id, type: 'vault', name: v.name, about: mxPlural(v.files.length, 'file'), updated: v.updated, ref: v })),
     ...p.playbooks.map(id => pbFind(id)).filter(Boolean).map(b => ({ id: 'pb:' + b.id, type: 'playbook', name: b.name, about: mxPlural(b.clauses.length, 'clause'), updated: b.updated, ref: b })),
-    ...p.requests.map(id => mxRequest(id)).filter(Boolean).map(r => ({ id: 'req:' + r.id, type: 'request', name: r.title, about: MX_ST.req[r.status].label, updated: r.updated, ref: r })),
+    ...p.requests.map(id => mxRequest(id)).filter(Boolean).map(r => ({ id: 'req:' + r.id, type: 'request', name: r.title, about: mxStLabel(r, r.status), updated: r.updated, ref: r })),
   ];
   const TYPE = { chat: 'Chat', vault: 'Vault', playbook: 'Playbook', request: 'Contract' };
   const tile = { chat: () => h('span', { class: 'mx-tile mx-tile--chat', html: MX_ASK_IC }), vault: () => mxTile('vault'),
