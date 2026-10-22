@@ -4703,7 +4703,7 @@ function intakeView() {
   const TABOF = (r) => !r.attorney && !r.resolvedBy ? 'unassigned' : r.attorney === USER.name ? 'mine' : 'others';
   /* the head both views share: settings, the view toggle, and New Request */
   const head = () => h('div', { class: 'mx-head-ctas' },
-    INTAKE_FX.rules ? h('button', { class: 'pbv-icon mx-rules-btn', type: 'button', 'aria-label': 'Intake settings', 'data-tip': 'Intake Settings', html: MI(GLYPHS.gear), onclick: () => stGo('channels') }) : null,
+    null /* the Intake settings gear is gone (22 Oct); Settings › Intake still holds them */,
     typeof mxViewToggle === 'function' ? mxViewToggle() : null,
     mxCta('New Request', (btn, keyboard) => pbWaysMenu(btn, 'mx-rq-new', [
       { key: 'ai', name: 'Submit with AI', desc: 'Say what you need in your own words, and Clavia fills in the request.',
