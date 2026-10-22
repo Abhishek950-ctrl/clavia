@@ -323,7 +323,7 @@ function mxTable(cfg) {
             onclick: (e) => { e.stopPropagation(); openFilters(btn, f.key); } }, say, h('span', { class: 'mx-dd-c', html: CHEV }));
           return btn;
         });
-        dropsEl.replaceChildren(view, pinBtn, h('span', { class: 'mx-drops-sep' }), ...fields);
+        dropsEl.replaceChildren(...[view, pinBtn, h('span', { class: 'mx-drops-sep' }), ...fields].filter(Boolean));
       };
     }
   }

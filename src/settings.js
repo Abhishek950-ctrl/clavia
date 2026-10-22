@@ -15,7 +15,7 @@ MX.settings = { open: null };
 
 const ST_NAV = [
   { group: 'Workspace', items: [['general', 'General'], ['members', 'Members']] },
-  { group: 'Intake', items: [['channels', 'Channels'], ['details', 'Request details'], ['rules', 'Routing rules'], ['approvals', 'Document approvals']] },
+  { group: 'Intake', items: [['channels', 'Channels'], ['details', 'Request details'], ['rules', 'Routing rules'], ['signing', 'Signing']] },
   { group: 'Horizon', items: [['profile', 'Company profile'], ['delivery', 'Delivery']] },
   { group: 'Connections', items: [['connectors', 'Connectors']] },
 ];
@@ -65,7 +65,7 @@ function settingsView() {
     : top === 'channels' ? stChannelsPage()
     : top === 'details' ? stDetailsPage()
     : top === 'rules' ? stRulesPage()
-    : top === 'approvals' ? stApprovalsPage()
+    : top === 'signing' ? stSigningPage()
     : top === 'members' ? stMembersPage()
     : top === 'profile' ? hzProfilePage()
     : top === 'delivery' ? hzDeliveryPage()
