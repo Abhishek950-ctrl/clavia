@@ -2249,11 +2249,13 @@ function menu(anchor, items) {
   /* a list of fifty times scrolls; a list of five does not need to, and
      a card that scrolls inside another card that scrolls is two bars */
   const long = items.filter(Boolean).length > 12;
+  /* when one row is the chosen one, every row keeps a place for the mark, so counts and keys stay in one column */
+  const ticks = items.some(it => it && it.tick);
   const el = h('div', { class: 'menu' + (long ? ' menu--long' : ''), role: 'menu' },
     items.filter(Boolean).map(it => it.rule
       ? h('div', { class: 'menu-rule' })
       : h('button', {
-          class: 'menu-item' + (it.danger ? ' danger' : ''),
+          class: 'menu-item' + (it.danger ? ' danger' : '') + (it.tick ? ' is-on' : ''),
           type: 'button', role: 'menuitem',
           onclick: () => { closeMenu(); it.run?.(); },
           html: it.html
@@ -2265,7 +2267,8 @@ function menu(anchor, items) {
           /* the one already chosen is marked at the end of the row: a
              mark in front of the label pushes every other label along */
           it.tick ? h('span', { class: 'menu-tick', 'aria-hidden': 'true',
-                                html: TICK_IC }) : null,
+                                html: TICK_IC })
+            : ticks ? h('span', { class: 'menu-tick is-blank', 'aria-hidden': 'true' }) : null,
           it.more ? h('span', { class: 'menu-more', 'aria-hidden': 'true' }) : null,
         )),
   );

@@ -355,6 +355,7 @@ function mxIntake() {
   /* the requests Roger keeps an eye on without having them */
   if (d.followV !== 1) { for (const r of d.intake) if (['RQ-1047', 'RQ-1043'].includes(r.id)) r.followed = true; d.followV = 1; save(); }
   for (const r of d.intake) {
+    mxStatusFix(r);
     if (r.source === undefined) r.source = MX_SOURCE[r.id]?.via || null;
     r.submitter ||= MX_SUBMITTERS[r.id] || USER.name;
     if (r.detail == null) r.detail = MX_ASKS[r.id] || '';
@@ -368,7 +369,7 @@ function mxIntake() {
       r.activity = [{ who: r.submitter, what: 'submitted the request', when: r.created }];
       if (r.attorney) r.activity.push(r.attorney === 'Roger Bennett' ? { who: 'Roger Bennett', what: 'took this on', when: at(2) }
         : { who: 'Roger Bennett', what: `assigned this to ${r.attorney}`, when: at(2) });
-      if (r.status === 'progress' || r.status === 'waiting') r.activity.push({ who: r.attorney || 'Roger Bennett', what: 'moved this to In Progress', when: at(5) });
+      if (!['new', 'done', 'cancelled'].includes(r.status)) r.activity.push({ who: r.attorney || 'Roger Bennett', what: `moved this to ${(MX_ST.req[r.status === 'waiting' ? mxStatusAt(r, mxStage(r)) : r.status] || MX_ST.req.drafting).label}`, when: at(5) });
       const ASKBACK = {
         Advice: 'Which customers’ logos would go on the site? I will check what each of their agreements allows.',
         Privacy: `Could you send ${r.counterparty || 'their'}’s marked-up DPA as a Word file? The PDF has lost the tracked changes.`,
@@ -420,6 +421,57 @@ function mxIntake() {
     d.slackV = 1; save(); }
   /* the seeded requests a routing rule placed say so */
   if (INTAKE_FX.rules && d.rulesV !== 2 && typeof mxRulesSeedStory === 'function') { mxRulesSeedStory(d.intake); d.rulesV = 2; save(); }
+  /* 21 Oct: every request carries at least three documents. Agreements are filled up from the
+     templates that suit their type; a question or a notice gets the papers that go with it */
+  if (d.docs3V !== 1) {
+    const PREF = { NDA: ['mutual-nda', 'one-way-nda', 'dpa'], 'Contract review': ['order-form', 'dpa', 'msa-short'], Drafting: ['order-form', 'dpa', 'mutual-nda', 'msa-short'],
+      Privacy: ['msa-short', 'order-form', 'mutual-nda'], Signature: ['msa-short', 'order-form', 'dpa'] };
+    const note = (title, paras) => [{ t: 'h1', v: mxEsc(title) }, ...paras.map(p => ({ t: 'p', v: mxEsc(p) }))];
+    const PAPERS = {
+      Advice: (r) => [['Research note', ['What the business asked, the contracts that bear on it, and the answer legal is working towards.', 'Open points are marked for the lawyer to confirm before the answer goes back.']],
+        ['Relevant contract extracts', ['The clauses from our customer agreements that bear on this question, quoted as signed.']],
+        ['Request from the business', [r.detail || r.title]]],
+      Termination: (r) => [['Existing agreement', [`The agreement with ${r.counterparty || 'the other side'} that this notice ends, as signed.`]],
+        ['Termination checklist', ['Notice period and deadline', 'Who must receive the notice and how', 'What survives the end of the agreement', 'Data to return or delete']]],
+    };
+    for (const r of d.intake) {
+      const docs = mxDocuments(r); if (r.ingesting?.length) continue;
+      const at = (i) => new Date(new Date(r.created || mxNow()).getTime() + (i + 2) * 36e5).toISOString();
+      const name = (t) => `${r.counterparty || 'Draft'} — ${t}`;
+      const add = (title, blocks, src) => docs.push({ id: pbUid('doc'), title: `${title}.docx`, ...(src ? { source: src } : {}),
+        versions: [{ name: 'First draft', by: src ? 'Clavia' : (r.attorney || 'Roger Bennett'), when: at(docs.length), file: `${title}.docx`, blocks }] });
+      if (PAPERS[r.type]) for (const [t, ps] of PAPERS[r.type](r)) { if (docs.length >= 3) break; add(r.type === 'Advice' ? t : name(t), note(t, ps)); }
+      for (const id of PREF[r.type] || PREF.Drafting) {
+        if (docs.length >= 3) break;
+        const t = mxTemplate(id); if (!t || docs.some(x => x.source === id)) continue;
+        add(name(t.name), mxDraftBlocks(t, { counterparty: r.counterparty, counterparty_address: r.address }), id);
+      }
+      r.documents = docs;
+    }
+    d.docs3V = 1; save();
+  }
+  /* 22 Oct: one document part-way through signing, for showing it: Brightwell's Order Form went out two
+     days ago to three people; their contact and Roger have signed, Sarah Lin has not */
+  if (d.sign2of3V !== 1) {
+    const r = d.intake.find(q => q.id === 'RQ-1049'), doc = r && mxDocuments(r).find(x => /order form/i.test(x.title));
+    if (r && doc && !mxEnvelopes(r).some(e => e.docs.some(y => y.doc === doc.id))) {
+      const ago = (h) => new Date(Date.now() - h * 36e5).toISOString();
+      const them = mxPeople(r).find(p => p.side === 'counterparty');
+      mxEnvelopes(r).push({ id: pbUid('env'), sent: ago(50), state: 'out', provider: 'docusign', order: 'sequential',
+        levels: [{ side: 'them', rule: 'all' }, { side: 'us', rule: 'all' }], docs: [{ doc: doc.id, v: doc.versions.length }],
+        signers: [
+          { who: them?.name || 'Marcus Hale', title: (them?.role || 'Procurement Director').split(' · ')[0], email: them?.email || 'marcus.hale@brightwell.example', side: 'them', level: 0, state: 'signed', at: ago(30) },
+          { who: 'Roger Bennett', title: 'General Counsel', email: USER.email, side: 'us', level: 1, state: 'signed', at: ago(6) },
+          { who: 'Sarah Lin', title: 'VP Finance & Controller', email: mxEmail('Sarah Lin'), side: 'us', level: 1, state: 'sent', at: null }] });
+      r.activity ||= [];
+      r.activity.push({ who: 'Elena Petrova', ev: 'email', what: `sent v${doc.versions.length} of ${doc.title.replace(/\.\w+$/, '')} for signature to ${them?.name || 'Marcus Hale'}, Roger Bennett and Sarah Lin`, when: ago(50), ref: { doc: doc.id, v: doc.versions.length } },
+        { who: 'Clavia', ev: 'status', what: `recorded ${them?.name || 'Marcus Hale'}’s signature`, when: ago(30) },
+        { who: 'Roger Bennett', ev: 'status', what: 'signed for us', when: ago(6) });
+    }
+    d.sign2of3V = 1; save();
+  }
+  /* 22 Oct: approvals were taken out of the design; versions that waited for one no longer do */
+  if (d.noApV !== 1) { for (const r of d.intake) for (const doc of (r.documents || [])) for (const v of doc.versions) delete v.ap; d.noApV = 1; save(); }
   return d.intake;
 }
 
@@ -664,123 +716,7 @@ function requestForm() {
     oninput: (e) => { f[key] = e.target.value; sync(); } });
   const titleIn = input('title', 'e.g. Fleetwise Mobility — Enterprise MNDA');
 
-  /* the paper it starts from: one of ours, or theirs. A small two-way switch
-     beside the label; under it, either our templates as a list you can open,
-     or a place to drop their document. */
-  const CHEV = '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M4.5 6.5 8 10l3.5-3.5"/></svg>';
-  const TICK = '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m3.5 8.3 2.8 2.8 6.2-6.4"/></svg>';
-  const tplSub = (t) => [t.kind, 'v' + mxTplVer(t)].filter(Boolean).join(' · ');
-  /* our templates: as many as the work needs, each a row you can take out, and one more to add */
-  const tplList = h('div', { class: 'mx-rqf-stack' });
-  const addTpl = h('button', { class: 'mx-rqf-add', type: 'button', 'aria-haspopup': 'listbox', onclick: (e) => { e.stopPropagation(); openTpls(); } });
-  let paintTpl = () => {
-    const chosen = f.templates.map(id => tpls.find(t => t.id === id)).filter(Boolean);
-    tplList.replaceChildren(...chosen.map(t => h('div', { class: 'mx-rqf-item' }, mxTile('tpl'),
-      h('span', { class: 'mx-rqf-pick-t' }, h('span', { class: 'mx-rqf-pick-n' }, t.name), h('span', { class: 'mx-rqf-pick-s' }, tplSub(t))),
-      h('button', { class: 'mx-rqf-file-x', type: 'button', 'aria-label': `Remove ${t.name}`,
-        html: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"><path d="M4.5 4.5l7 7M11.5 4.5l-7 7"/></svg>',
-        onclick: () => { f.templates = f.templates.filter(x => x !== t.id); paintTpl(); sync(); } }))));
-    /* two ways in, each a small tile that says what it is and what it does */
-    const n = f.templates.length;
-    addTpl.replaceChildren(h('span', { class: 'mx-rqf-tile-ic is-tpl' }, mxTile('tpl')),
-      h('span', { class: 'mx-rqf-tile-t' }, h('b', {}, n ? 'Add a template' : 'Our templates'),
-        h('span', {}, n ? `${mxPlural(n, 'template')} chosen` : `${tpls.length} approved, ready to fill`)),
-      h('span', { class: 'mx-rqf-tile-go', html: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M8 3.5v9M3.5 8h9"/></svg>' }));
-  };
-  /* the picker: find one by name, tick as many as the work needs, done */
-  const openTpls = (anchor = addTpl) => {
-    document.querySelector('.mx-tpk')?.remove();
-    const q = h('input', { class: 'mx-tpk-q', type: 'text', placeholder: 'Find a template…', 'aria-label': 'Find a template', autocomplete: 'off' });
-    const list = h('div', { class: 'mx-tpk-list', role: 'listbox', 'aria-multiselectable': 'true' });
-    const count = h('span', { class: 'mx-tpk-n' });
-    const done = h('button', { class: 'pb-btn pb-btn--primary mx-tpk-done', type: 'button', onclick: () => shut() }, 'Done');
-    const pop = h('div', { class: 'mx-tpk mx-tpk--multi' },
-      h('div', { class: 'mx-tpk-head' }, h('span', { class: 'mx-tpk-glass', html: PB_SVG.search }), q),
-      list,
-      h('div', { class: 'mx-tpk-foot' }, count, done));
-    const rows = () => {
-      const t0 = q.value.trim().toLowerCase();
-      const shown = tpls.filter(t => !t0 || (t.name + ' ' + (t.kind || '')).toLowerCase().includes(t0));
-      list.replaceChildren(...(shown.length ? shown.map(t => {
-        const on = f.templates.includes(t.id);
-        return h('button', { class: 'mx-tpk-row' + (on ? ' is-on' : ''), type: 'button', role: 'option', 'aria-selected': String(on),
-          onclick: () => { f.templates = on ? f.templates.filter(x => x !== t.id) : [...f.templates, t.id]; rows(); paintTpl(); sync(); } },
-          h('span', { class: 'mx-tpk-box' + (on ? ' is-on' : ''), html: on ? TICK : '' }),
-          mxTile('tpl'), h('span', { class: 'mx-rqf-pick-t' }, h('span', { class: 'mx-rqf-pick-n' }, t.name), h('span', { class: 'mx-rqf-pick-s' }, tplSub(t))));
-      }) : [h('div', { class: 'mx-tpk-none' }, `No template called “${q.value.trim()}”`)]));
-      count.textContent = f.templates.length ? `${mxPlural(f.templates.length, 'template')} chosen` : 'Choose one or more';
-    };
-    q.oninput = rows;
-    rows();
-    document.body.append(pop);
-    const r = anchor.getBoundingClientRect(), box = (anchor.closest('.mx-rqf-f') || anchor).getBoundingClientRect();
-    pop.style.width = box.width + 'px'; pop.style.left = box.left + 'px';
-    pop.style.top = (innerHeight - r.bottom > pop.offsetHeight + 16 ? r.bottom + 6 : Math.max(12, r.top - pop.offsetHeight - 6)) + 'px';
-    anchor.setAttribute('aria-expanded', 'true');
-    q.focus();
-    const out = (e) => { if (!pop.contains(e.target) && !anchor.contains(e.target)) shut(); };
-    const esc = (e) => { if (e.key === 'Escape') { e.stopPropagation(); shut(); } if (e.key === 'Enter' && document.activeElement === q) { e.preventDefault(); list.querySelector('.mx-tpk-row')?.click(); } };
-    function shut() { pop.remove(); anchor.setAttribute('aria-expanded', 'false'); removeEventListener('mousedown', out, true); removeEventListener('keydown', esc, true); }
-    addEventListener('mousedown', out, true); addEventListener('keydown', esc, true);
-  };
-  paintTpl();
-
-  /* their paper: one document or several, each a row; the drop zone stays under them for more */
-  const take = (list) => { for (const x of list) if (!f.files.some(y => y.name === x.name)) f.files.push(x); paintFile(); sync(); };
-  const fileIn = h('input', { type: 'file', hidden: true, multiple: true, accept: '.docx,.doc,.pdf,.rtf,.txt',
-    onchange: (e) => { take([...e.target.files]); e.target.value = ''; } });
-  const drop = h('div', { class: 'mx-rqf-drop2', role: 'button', tabindex: '0', onclick: () => fileIn.click(),
-    onkeydown: (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); fileIn.click(); } } });
-  const fileList = h('div', { class: 'mx-rqf-stack' });
-  const kb = (n) => !n ? '' : n > 1e6 ? (n / 1e6).toFixed(1) + ' MB' : Math.max(1, Math.round(n / 1e3)) + ' KB';
-  let paintFile = () => {
-    drop.classList.toggle('is-small', f.files.length > 0);
-    drop.replaceChildren(h('span', { class: 'mx-rqf-drop2-ic', html: APM_IC.upload ? '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">' + APM_IC.upload + '</svg>' : '' }),
-      h('span', { class: 'mx-rqf-drop2-t' }, h('b', {}, f.files.length ? 'Add another document' : 'Drop their documents here'), ' or ', h('u', {}, 'browse')),
-      h('span', { class: 'mx-rqf-drop2-s' }, 'Word or PDF'));
-    fileList.replaceChildren(...f.files.map(x => h('div', { class: 'mx-rqf-item' }, mxTile('file', mxExt(x.name)),
-      h('span', { class: 'mx-rqf-pick-t' }, h('span', { class: 'mx-rqf-pick-n' }, x.name), h('span', { class: 'mx-rqf-pick-s' }, kb(x.size) || 'Ready to send')),
-      h('button', { class: 'mx-rqf-file-x', type: 'button', 'aria-label': `Remove ${x.name}`,
-        html: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"><path d="M4.5 4.5l7 7M11.5 4.5l-7 7"/></svg>',
-        onclick: () => { f.files = f.files.filter(y => y !== x); paintFile(); sync(); } }))), drop);
-  };
-  for (const ev of ['dragenter', 'dragover']) drop.addEventListener(ev, (e) => { e.preventDefault(); drop.classList.add('is-over'); });
-  drop.addEventListener('dragleave', () => drop.classList.remove('is-over'));
-  drop.addEventListener('drop', (e) => { e.preventDefault(); drop.classList.remove('is-over'); take([...e.dataTransfer.files]); });
-  paintFile();
-
-  /* one list: the templates chosen and their documents dropped in, together;
-     under it, the two ways to add one more */
-  const stack = h('div', { class: 'mx-rqf-stack' });
-  const upBtn = h('button', { class: 'mx-rqf-tile', type: 'button', onclick: () => fileIn.click() },
-    h('span', { class: 'mx-rqf-tile-ic is-up', html: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 15V4M7.5 8.5 12 4l4.5 4.5"/><path d="M4.5 14.5v4A1.5 1.5 0 0 0 6 20h12a1.5 1.5 0 0 0 1.5-1.5v-4"/></svg>' }),
-    h('span', { class: 'mx-rqf-tile-t' }, h('b', {}, 'Their paper'), h('span', {}, 'Drop or upload Word or PDF')),
-    h('span', { class: 'mx-rqf-tile-go', html: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M8 3.5v9M3.5 8h9"/></svg>' }));
-  addTpl.className = 'mx-rqf-tile';
-  const adds = h('div', { class: 'mx-rqf-tiles' }, addTpl, upBtn);
-  /* nothing yet: the two ways in, as tiles. Something chosen: one quiet list of
-     everything — templates and their files together — and one "Add" that offers both */
-  const more = h('button', { class: 'mx-rqf-more', type: 'button', 'aria-haspopup': 'menu' },
-    h('span', { class: 'mx-rqf-more-ic', html: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M8 3.5v9M3.5 8h9"/></svg>' }), 'Add');
-  more.onclick = (e) => { e.stopPropagation(); menu(more, [
-    { label: 'A template', html: '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="3" width="14" height="18" rx="2.5"/><path d="M8.5 8h7M8.5 12h3.5M14 12h1.5M8.5 16h2M12.5 16h3"/></svg>', run: () => openTpls(more) },
-    { label: 'Their paper', html: '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 15V4M7.5 8.5 12 4l4.5 4.5"/><path d="M4.5 14.5v4A1.5 1.5 0 0 0 6 20h12a1.5 1.5 0 0 0 1.5-1.5v-4"/></svg>', run: () => fileIn.click() },
-  ]); if (openMenu) { openMenu.classList.add('mx-add-menu'); openMenu.style.left = more.getBoundingClientRect().left + 'px'; openMenu.style.zIndex = 200; } };
-  const paintDocs = () => {
-    /* rebuilt from what is chosen each time, templates and files together */
-    _pt(); _pf();
-    const items = [...tplList.querySelectorAll('.mx-rqf-item'), ...fileList.querySelectorAll('.mx-rqf-item')];
-    stack.classList.toggle('has-items', items.length > 0);
-    stack.replaceChildren(...(items.length ? [h('div', { class: 'mx-rqf-list' }, ...items), more] : [adds]), fileIn);
-  };
-  const _pt = paintTpl, _pf = paintFile;
-  paintTpl = () => { _pt(); paintDocs(); };
-  paintFile = () => { _pf(); paintDocs(); };
-  for (const ev of ['dragenter', 'dragover']) stack.addEventListener(ev, (e) => { e.preventDefault(); adds.classList.add('is-over'); });
-  stack.addEventListener('dragleave', () => adds.classList.remove('is-over'));
-  stack.addEventListener('drop', (e) => { e.preventDefault(); adds.classList.remove('is-over'); take([...e.dataTransfer.files]); });
-  paintTpl(); paintFile();
-  const paper = h('div', { class: 'mx-rqf-f' }, h('span', { class: 'mx-rqf-l' }, 'Documents'), stack);
+  const paper = mxDocsField(f, () => sync(), tpls);
 
   const submit = h('button', { class: 'pb-btn pb-btn--primary', type: 'button', disabled: true, onclick: () => {
     const chosen = f.templates.map(id => tpls.find(t => t.id === id)).filter(Boolean);
@@ -838,11 +774,24 @@ function mxStage(r) {
   r.stage = Math.min(r.stage, s.length - 1);
   return r.stage;
 }
-/* finished with: completed or cancelled */
+/* finished with: signed or cancelled */
 const mxClosed = (r) => r.status === 'done' || r.status === 'cancelled';
+/* the status a stage of the path reads as */
+function mxStatusAt(r, i) {
+  const s = mxStages(r), name = s[i] || '';
+  return i === s.length - 1 ? 'done' : i === 0 ? 'new' : /negotiation/i.test(name) ? 'negotiation' : /signing/i.test(name) ? 'signature' : 'drafting';
+}
+/* the statuses a kind of request can be in, and what its finish is called:
+   a question is answered and a notice sent; only agreements are signed */
+function mxStKeys(r) {
+  const p = mxPipe(r);
+  return Object.keys(MX_ST.req).filter(k => !(p === 'advice' && (k === 'negotiation' || k === 'signature')) && !(p === 'notice' && k === 'negotiation'));
+}
+const mxStLabel = (r, k) => k === 'done' && mxPipe(r) === 'advice' ? 'Answered' : k === 'done' && mxPipe(r) === 'notice' ? 'Sent' : (MX_ST.req[k] || MX_ST.req.drafting).label;
+/* before 21 Oct a request was just "In progress"; it now says where the work is */
+const mxStatusFix = (r) => { if (!MX_ST.req[r.status]) r.status = r.status === 'progress' ? mxStatusAt(r, mxStage(r)) : 'drafting'; };
 function mxSetStage(r, i) {
-  const s = mxStages(r);
-  r.stage = i; r.status = i === s.length - 1 ? 'done' : i === 0 ? 'new' : 'progress';
+  r.stage = i; r.status = mxStatusAt(r, i);
   r.updated = mxNow(); save();
 }
 /* the ring for any stage of a path, for the menu */
@@ -938,10 +887,6 @@ function mxSignWaiting(r) {
   return sg.approvals.filter(x => !x.gone && mxApNow(r, x).k !== 'approved').map(x => ({ who: x.who || `Any one of ${x.team}`, what: x.role }));
 }
 /* is this request waiting on my yes: an approval asked of me by name */
-function mxAwaitsMe(r) {
-  const sg = mxSign(r); if (!sg || !sg.requested) return false;
-  return sg.approvals.some(x => !x.gone && x.who === USER.name && ['pending', 'stale'].includes(mxApNow(r, x).k));
-}
 /* what an approver needs to say yes without opening the contract: the deal in one line, and the
    few terms that matter to their step, each as it now stands */
 function mxApprovalBrief(r, step, point) {
@@ -1176,28 +1121,41 @@ function mxRoundSay(r, d) {
 /* the stage where you see it, changeable there: the whole path in order,
    what is done ticked, where it is now marked, what is left dotted */
 /* ── a request's status, as a task's ──
-   New · In progress · Waiting · Completed · Cancelled (MX_ST.req). The path the work takes
+   New · Drafting · Negotiation · Waiting · Out for signature · Signed · Cancelled (MX_ST.req). The path the work takes
    (drafting, negotiation, signing) still runs underneath for approvals and signatures. */
 function mxReqStatusMenu(anchor, r, picked) {
-  pbWaysMenu(anchor, 'mx-st', Object.entries(MX_ST.req).map(([k, v]) => ({
-    key: k, name: v.label, on: k === r.status,
+  pbWaysMenu(anchor, 'mx-st', mxStKeys(r).map(k => [k, MX_ST.req[k]]).map(([k, v]) => ({
+    key: k, name: mxStLabel(r, k), on: k === r.status,
     icon: () => h('span', { class: 'mx-st-mi', style: `color:${v.color}`, html: v.svg }) })),
   (k) => {
     if (k === r.status) return;
+    mxUnsignedGate(r, k, () => setIt(k));
+  }, { small: true });
+  function setIt(k) {
     const was = r.status;
     r.status = k; r.updated = mxNow(); save();
-    mxLog(r, { ev: 'status', what: `moved this to ${MX_ST.req[k].label}` });
+    mxLog(r, { ev: 'status', what: `moved this to ${mxStLabel(r, k)}` });
     picked?.(k, was);
     /* finishing takes it off the open list, with a way back */
-    if (k === 'done' || k === 'cancelled') pbToast(`${r.id} is ${MX_ST.req[k].label.toLowerCase()}`, { label: 'Undo', run: () => { r.status = was; (r.activity || []).pop(); save(); picked?.(was, k); } });
-  }, { small: true });
+    if (k === 'done' || k === 'cancelled') pbToast(`${r.id} is ${mxStLabel(r, k).toLowerCase()}`, { label: 'Undo', run: () => { r.status = was; (r.activity || []).pop(); save(); picked?.(was, k); } });
+  }
+}
+/* calling a request signed while some of its documents are not asks first */
+function mxUnsignedGate(r, k, go) {
+  /* every document to sign that is not signed yet, whether or not it has been sent */
+  const left = k === 'done' && mxPipe(r) !== 'advice' ? mxToSign(r).filter(d => mxDocSign(r, d)?.st !== 'signed') : [];
+  if (!left.length) return go();
+  const say = mxStLabel(r, 'done').toLowerCase();
+  pbConfirm({ title: `Mark ${r.id} as ${say}?`, lead: `${left.length === 1 ? 'This document has' : 'These documents have'} not been signed yet. Mark it ${say} anyway?`,
+    items: left.map(d => ({ n: MX_SIGN_CHIP[mxDocSign(r, d)?.st] || (mxDocSign(r, d) ? `${mxDocSign(r, d).ns} of ${mxDocSign(r, d).n} signed` : 'Draft'), t: d.title.replace(/\.\w+$/, '') })),
+    action: `Mark as ${say}`, run: go });
 }
 function mxReqStatusBtn(r, after) {
-  if (!MX_ST.req[r.status]) r.status = 'progress';
+  mxStatusFix(r);
   const btn = h('button', { class: 'pb-st mx-st mx-st-btn', type: 'button', 'data-tip': 'Change Status', 'aria-haspopup': 'menu',
     onclick: (e) => { e.stopPropagation(); mxReqStatusMenu(btn, r, (k) => { paint(); btn.classList.remove('is-set'); void btn.offsetWidth; btn.classList.add('is-set'); after?.(k); }); } });
-  const paint = () => { const v = MX_ST.req[r.status] || MX_ST.req.progress; btn.style.setProperty('--st', v.color);
-    btn.replaceChildren(h('span', { class: 'pb-st-ic', html: v.svg }), v.label,
+  const paint = () => { const v = MX_ST.req[r.status] || MX_ST.req.drafting; btn.style.setProperty('--st', v.color);
+    btn.replaceChildren(h('span', { class: 'pb-st-ic', html: v.svg }), mxStLabel(r, r.status),
       ...(btn.classList.contains('rqp-stage') ? [h('span', { class: 'rqp-stage-chev', html: '<svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="m7 10 5 5 5-5"/></svg>' })] : [])); };
   paint();
   btn._paint = paint;
@@ -1470,8 +1428,177 @@ function mxAddVersion(r, v, docId) {
   const d = docId && docs.find(x => x.id === docId);
   if (d) d.versions.push(v);
   else docs.push({ id: pbUid('doc'), title: v.file || v.name, versions: [v] });
+  const nd = d || docs[docs.length - 1];
   r.updated = mxNow(); save();
-  return d || docs[docs.length - 1];
+  return nd;
+}
+
+/* the newest version of a document that can go out: anything but a comparison */
+function mxLatestOk(d) { for (let i = d.versions.length - 1; i >= 0; i--) if (!d.versions[i].cmp) return i; return -1; }
+
+/* ── signing, document by document (21 Oct) ───────────────────
+   Every send is an envelope: some documents, each at the version sent,
+   and the people who sign them. A document carries its own signing state
+   from the last envelope it went out in; the request's status follows the
+   least advanced document that still has to be signed.
+   Comparisons stay out of the count unless one is actually sent. */
+/* comparisons are for legal to read: they are not offered for signature unless someone adds one */
+const mxDocRelevant = (d) => !(d.versions.some(v => v.cmp) || /\bv\d+\s+vs\s+v\d+|comparison/i.test(`${d.title} ${d.versions[d.versions.length - 1]?.name || ''}`));
+function mxEnvelopes(r) {
+  if (!r.envelopes) {
+    r.envelopes = [];
+    /* a request sent the old way, one document at a time, becomes its first envelope */
+    const sg = r.sign;
+    if (sg?.sent && sg.doc) r.envelopes.push({ id: pbUid('env'), sent: sg.sent, docs: [{ doc: sg.doc.doc, v: sg.doc.v }], state: sg.signers.every(x => x.state === 'signed') ? 'signed' : 'out',
+      signers: sg.signers.map((x, i) => ({ who: x.who, title: '', email: x.who === USER.name ? USER.email : mxEmail(x.who || 'signer'), side: /for us|notice/i.test(x.what) ? 'us' : 'them', state: x.state === 'signed' ? 'signed' : 'sent', at: x.at })) });
+  }
+  return r.envelopes;
+}
+/* where an envelope stands: out, partly signed, signed, declined or voided. It does not expire */
+function mxEnvState(e) {
+  if (e.state !== 'out') return e.state;
+  return e.signers.some(x => x.state === 'signed') ? 'partial' : 'out';
+}
+/* a document's signing, from the last envelope it went out in */
+function mxDocSign(r, d) {
+  const e = [...mxEnvelopes(r)].reverse().find(x => x.docs.some(y => y.doc === d.id));
+  if (!e) return null;
+  const st = mxEnvState(e), { n, ns } = mxEnvCount(e);
+  return { e, st, v: e.docs.find(y => y.doc === d.id).v, n, ns };
+}
+
+/* ── how signing runs (Settings › Signing) ──
+   Signers sit in levels. In order, a level starts once the one before it is
+   complete; at the same time, every level is asked at once. A level is
+   complete when all its signers have signed, or when any one has, as the
+   level says. The default: the other side signs first, then one of our two
+   authorised signatories. */
+const MX_SIGN_CFG_DEFAULT = { provider: 'docusign', order: 'sequential', levels: [
+  { side: 'them', rule: 'all', who: ['@contact'] },
+  { side: 'us', rule: 'any', who: ['Roger Bennett', 'Sarah Lin'] }] };
+function mxSignCfg() { const d = mxData(); d.signCfg ||= structuredClone(MX_SIGN_CFG_DEFAULT); return d.signCfg; }
+const MX_SIGN_PROVIDER = { docusign: 'DocuSign', adobe: 'Adobe Acrobat Sign', clavia: 'Clavia e-sign' };
+const mxEnvLevels = (e) => e.levels || [{ rule: 'all' }];
+const mxLvl = (x) => x.level || 0;
+function mxLevelDone(e, i) {
+  const xs = e.signers.filter(x => mxLvl(x) === i), rule = mxEnvLevels(e)[i]?.rule || 'all';
+  return xs.length > 0 && (rule === 'any' ? xs.some(x => x.state === 'signed') : xs.every(x => x.state === 'signed'));
+}
+/* the level being asked now: in order, the first not complete; at the same time, all of them (-1) */
+const mxEnvNow = (e) => e.order === 'sequential' ? mxEnvLevels(e).findIndex((_, i) => !mxLevelDone(e, i)) : -1;
+/* can this signer sign right now */
+const mxCanSign = (e, x) => x.state !== 'signed' && !mxLevelDone(e, mxLvl(x)) && (mxEnvNow(e) < 0 || mxEnvNow(e) === mxLvl(x));
+/* signatures needed and given: a level of "any one" needs one */
+function mxEnvCount(e) {
+  return mxEnvLevels(e).reduce((a, lv, i) => { const xs = e.signers.filter(x => mxLvl(x) === i), need = lv.rule === 'any' ? Math.min(1, xs.length) : xs.length;
+    return { n: a.n + need, ns: a.ns + Math.min(need, xs.filter(x => x.state === 'signed').length) }; }, { n: 0, ns: 0 });
+}
+const mxEnvComplete = (e) => mxEnvLevels(e).every((_, i) => mxLevelDone(e, i));
+
+/* ── a document's one status ──
+   Draft, Out for signature, Signed. A signing declined or voided is a Draft again;
+   the reason is in the document's history. */
+function mxDocStatus(r, d) {
+  const x = mxDocSign(r, d), v = d.versions[d.versions.length - 1];
+  if (x?.st === 'signed') return { k: 'signed', label: 'Signed' };
+  if (x && ['out', 'partial', 'expired'].includes(x.st)) return { k: 'out', label: 'Out for signature' };
+  void v;
+  return { k: 'draft', label: 'Draft' };
+}
+/* out, partly signed or signed: the version sent is what gets signed, so nothing new goes on it */
+const mxDocLocked = (r, d) => ['out', 'partial', 'expired', 'signed'].includes(mxDocSign(r, d)?.st);
+const MX_SIGN_CHIP = { draft: 'Draft', out: 'Out for signature', signed: 'Signed', declined: 'Declined', expired: 'Expired', voided: 'Voided' };
+/* every document's status as one family of symbols: the same page, with lines while it is a draft,
+   a clock while it waits on signers, a tick once it is signed */
+const MX_DOC_SVG = (p) => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">${p}</svg>`;
+const MX_DOC_PAGE = '<path d="M14 2.5H6.5a2 2 0 0 0-2 2v15a2 2 0 0 0 2 2h11a2 2 0 0 0 2-2V8z"/><path d="M14 2.5V8h5.5"/>';
+const MX_DOC_ST_IC = {
+  draft: MX_DOC_SVG(MX_DOC_PAGE + '<path d="M8.5 12.5h7M8.5 16h5"/>'),
+  out: MX_DOC_SVG('<path d="M14 2.5H6.5a2 2 0 0 0-2 2v6"/><path d="M14 2.5V8h5.5v11.5a2 2 0 0 1-2 2h-3"/><path d="M14 2.5 19.5 8"/><circle cx="8.5" cy="16.5" r="5"/><path d="M8.5 14.3v2.4l1.5 1"/>'),
+  signed: MX_DOC_SVG(MX_DOC_PAGE + '<path d="m8.8 14.6 2.2 2.2 4.2-4.4"/>'),
+};
+const mxDocStIcon = (st, cls = '') => h('span', { class: `mx-dst is-${st.k} ${cls}`, 'aria-hidden': 'true', html: MX_DOC_ST_IC[st.k] });
+function mxDocChip(r, d, cls = '') {
+  const st = mxDocStatus(r, d);
+  return h('span', { class: `mx-dst-wrap ${cls}`, 'data-tip': st.sub ? `${st.label} · ${st.sub}` : st.label, 'aria-label': st.label }, mxDocStIcon(st));
+}
+/* the documents that have to be signed before the request is: every document but a comparison, and anything that was sent */
+function mxToSign(r) {
+  return mxDocuments(r).filter(d => mxDocRelevant(d) || mxEnvelopes(r).some(e => e.docs.some(y => y.doc === d.id)));
+}
+/* signing progress for the request, said short: "1/2 signed" */
+function mxSignCount(r) {
+  if (!mxEnvelopes(r).length) return null;
+  const list = mxToSign(r);
+  return { n: list.length, signed: list.filter(d => mxDocSign(r, d)?.st === 'signed').length, out: list.filter(d => ['out', 'partial', 'expired', 'signed'].includes(mxDocSign(r, d)?.st)).length };
+}
+/* the request's status, from its least advanced document; only once something has been sent */
+function mxSignSync(r) {
+  if (!mxEnvelopes(r).length || r.status === 'cancelled') return;
+  const c = mxSignCount(r); if (!c?.n) return;
+  const k = c.signed === c.n ? 'done' : c.out === c.n ? 'signature' : r.status === 'waiting' ? 'waiting' : 'negotiation';
+  if (k === r.status) return;
+  const was = r.status; r.status = k;
+  const s = mxStages(r), at = k === 'done' ? s.length - 1 : s.indexOf(k === 'signature' ? 'Signing' : 'Negotiation');
+  if (at >= 0) r.stage = at;
+  if (was !== k) mxLog(r, { who: 'Clavia', ev: 'status', what: `moved this to ${mxStLabel(r, k)}` });
+}
+const mxSignedBy = (e) => e.signers.map(y => `${y.who}`).join(' and ');
+function mxEnvSend(r, items, signers, how = {}) {
+  const cfg = mxSignCfg();
+  const e = { id: pbUid('env'), sent: mxNow(), state: 'out', docs: items.map(({ d, k }) => ({ doc: d.id, v: k + 1 })),
+    provider: how.provider || cfg.provider, order: how.order || cfg.order, levels: how.levels || [{ rule: 'all' }],
+    signers: signers.map(s => ({ who: s.name, title: s.title, email: s.email, side: s.them ? 'them' : 'us', level: s.level || 0, state: 'sent', at: null })) };
+  mxEnvelopes(r).push(e);
+  items.forEach(({ d, k }) => mxLog(r, { ev: 'email', what: `sent v${k + 1} of ${d.title.replace(/\.\w+$/, '')} for signature to ${mxSignedBy(e)}`, ref: { doc: d.id, v: k + 1 } }));
+  mxSignSync(r); save();
+  return e;
+}
+function mxEnvSign(r, e, x) {
+  x.state = 'signed'; x.at = mxNow();
+  mxLog(r, { ev: 'status', what: x.who === USER.name ? 'signed for us' : `recorded ${x.who}’s signature` });
+  /* a level of "any one" is done with this signature: the others there are no longer asked */
+  if (mxLevelDone(e, mxLvl(x))) e.signers.forEach(y => { if (mxLvl(y) === mxLvl(x) && y.state !== 'signed') y.state = 'skipped'; });
+  if (mxEnvComplete(e)) {
+    e.state = 'signed'; e.ended = mxNow();
+    const docs = mxDocuments(r), on = (y) => new Date(y.at).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' });
+    for (const it of e.docs) {
+      const d = docs.find(z => z.id === it.doc); if (!d) continue;
+      const src = d.versions[it.v - 1] || d.versions[d.versions.length - 1];
+      mxAddVersion(r, { name: 'Signed copy', by: 'Clavia', when: mxNow(), file: `${d.title.replace(/\.\w+$/, '')} — signed.pdf`, signedCopy: e.id,
+        blocks: [...(src.blocks || []), { t: 'meta', v: e.signers.filter(y => y.state === 'signed').map(y => `SIGNED BY ${String(y.who).toUpperCase()}${y.title ? ', ' + y.title.toUpperCase() : ''} ON ${on(y).toUpperCase()}`).join(' · ') + ` · ENVELOPE ${e.id.toUpperCase()}` }],
+        note: 'Every signature in' }, d.id);
+    }
+    mxLog(r, { who: 'Clavia', ev: 'version', what: `everyone has signed: saved ${e.docs.length > 1 ? 'the signed copies' : 'the signed copy'}` });
+  }
+  mxSignSync(r); save();
+}
+function mxEnvDecline(r, e, x, why) {
+  x.state = 'declined'; x.at = mxNow(); e.state = 'declined'; e.ended = mxNow(); e.reason = why || '';
+  mxLog(r, { ev: 'status', what: `recorded that ${x.who} declined to sign${why ? `: “${why}”` : ''}` });
+  mxSignSync(r); save();
+}
+function mxEnvVoid(r, e) {
+  e.state = 'voided'; e.ended = mxNow();
+  mxLog(r, { ev: 'status', what: `voided the signature request and told ${mxSignedBy(e)}` });
+  mxSignSync(r); save();
+}
+function mxEnvRemind(r, e) {
+  const left = e.signers.filter(x => mxCanSign(e, x));
+  left.forEach(x => { x.reminded = mxNow(); });
+  mxLog(r, { ev: 'email', what: `reminded ${left.map(x => x.who).join(' and ')} to sign` });
+  save();
+}
+function mxEnvResend(r, e) {
+  e.sent = mxNow(); e.signers.forEach(x => { if (x.state !== 'signed' && !mxLevelDone(e, mxLvl(x))) { x.state = 'sent'; x.reminded = null; } });
+  mxLog(r, { ev: 'email', what: `sent the signature request again to ${e.signers.filter(x => x.state !== 'signed').map(x => x.who).join(' and ')}` });
+  save();
+}
+function mxEnvChangeSigner(r, e, x, to) {
+  const was = x.who;
+  Object.assign(x, { who: to.name, title: to.title, email: to.email, state: 'sent', at: null, reminded: null });
+  mxLog(r, { ev: 'assign', what: `changed a signer from ${was} to ${to.name}` });
+  save();
 }
 /* the issues Clavia has read from a request's versions, kept on the
    request once seen so a lawyer's status changes stick */
@@ -1632,7 +1759,7 @@ function mxDocuments(r) {
   return r.documents;
 }
 /* a question has no paper: its page takes the whole width */
-const mxPaperless = (r) => r.type === 'Advice' || (!mxDocuments(r).length && !mxTemplateFor(r) && !MX_CONTRACT_OF[r.counterparty] && r.type !== 'Contract review' && r.type !== 'Privacy' && r.type !== 'NDA' && !r.ingesting);
+const mxPaperless = (r) => (r.type === 'Advice' && !mxDocuments(r).length) || (!mxDocuments(r).length && !mxTemplateFor(r) && !MX_CONTRACT_OF[r.counterparty] && r.type !== 'Contract review' && r.type !== 'Privacy' && r.type !== 'NDA' && !r.ingesting);
 
 function mxDraftBlocks(tpl, vals) {
   const txt = (s) => mxEsc(s).replace(/\{\{([a-z0-9_]+)\}\}/gi, (_, k) => vals[k] ? mxEsc(vals[k]) : `<mark>[${mxEsc(mxFieldLabel(tpl, k))}]</mark>`);
@@ -1664,17 +1791,160 @@ function mxSummary(r) {
     latest ? ['Latest', `${latest.d.title.replace(/\.(docx?|pdf|txt|md)$/i, '')} v${latest.d.versions.length}, ${/^(uploaded|new version)/i.test(latest.v.name) ? 'uploaded' : 'from ' + latest.v.by} ${said}.${docs.length > 1 ? ` ${docs.length} documents in all.` : ''}`]
       : r.type === 'Advice' ? null : ['Latest', 'No document has come in yet.'],
     /* where each document's negotiation stands, in one line */
-    ((list) => list.length ? ['Negotiation', list.join(' · ') + '.'] : null)(docs.map(d => { const rs = mxRoundSay(r, d); if (!rs) return null;
+    ((list) => list.length ? ['Negotiation', list.join(' · ') + '.'] : null)(docs.map(d => { const rs = !mxDocSign(r, d) || mxDocSign(r, d).st === 'voided' || mxDocSign(r, d).st === 'declined' ? mxRoundSay(r, d) : null; if (!rs) return null;
       const tag = /msa/.test(d.source || '') ? 'MSA' : d.source === 'dpa' ? 'DPA' : /nda/.test(d.source || '') ? 'NDA' : d.title.replace(/\.(docx?|pdf|txt|md)$/i, '');
       return `${tag} ${rs.k === 'with' ? rs.say.replace(/^With/, 'with') : rs.k === 'answer' ? `has ${rs.say}` : 'is ready to send back'}`; }).filter(Boolean)),
+    /* where the signing stands: what is out, who has signed, who it waits on, and what is left */
+    mxEnvelopes(r).length ? ['Signing', mxSignSay(r)] : null,
     read ? ['Review', read] : null,
     fp.needs ? ['Needed', `From ${r.submitter.split(' ')[0]}: ${fp.needs.join(' and ').toLowerCase()}.`] : null,
     /* where the conversation stands: the last thing anyone said */
     (() => { const w = [...(r.activity || [])].reverse().find(a => a.kind === 'reply' || a.kind === 'note'); if (!w) return null;
       const t = w.what.length > 120 ? w.what.slice(0, 118).replace(/\s+\S*$/, '') + '…' : w.what;
       return ['Last word', `${w.who === USER.name ? 'You' : w.who.split(' ')[0]}: “${t}”`]; })(),
-  ].filter(Boolean);
+  ].filter(Boolean)
+  /* at most four points (22 Oct): the ones that matter most, kept in their reading order */
+    .map((p, n) => ({ p, n, rank: ['Question', 'Timing', 'Signing', 'Negotiation', 'Needed', 'Last word', 'Latest', 'Review'].indexOf(p[0]) }))
+    .sort((a, b) => a.rank - b.rank).slice(0, 4).sort((a, b) => a.n - b.n).map(x => x.p);
   return { para, intro, points, fp, minutes: Math.max(1, Math.round(para.split(/\s+/).length / 200)) };
+}
+
+function mxSignSay(r) {
+  const docs = mxDocuments(r), nm = (d) => `${d.title.replace(/\.(docx?|pdf|txt|md)$/i, '')} v${mxDocSign(r, d).v}`;
+  const live = mxEnvelopes(r).filter(e => ['out', 'partial', 'expired'].includes(mxEnvState(e)));
+  const parts = live.map(e => {
+    const ds = e.docs.map(y => docs.find(d => d.id === y.doc)).filter(Boolean);
+    const done = e.signers.filter(x => x.state === 'signed').map(x => x.who.split(' ')[0]), wait = e.signers.filter(x => x.state !== 'signed').map(x => x.who);
+    return `${ds.map(nm).join(' and ')} ${ds.length > 1 ? 'are' : 'is'} out with ${e.signers.filter(x => x.side === 'them').map(x => x.who).join(' and ') || mxSignedBy(e)} since ${new Date(e.sent).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}. ${done.length ? `${done.join(' and ')} signed; waiting on ${wait.join(' and ')}.` : `Waiting on ${wait.join(' and ')}.`}`;
+  });
+  const signed = mxToSign(r).filter(d => mxDocSign(r, d)?.st === 'signed').map(d => d.title.replace(/\.(docx?|pdf|txt|md)$/i, ''));
+  const declined = docs.filter(d => mxDocSign(r, d)?.st === 'declined' && !mxDocSign(r, d).e.ack).map(d => d.title.replace(/\.(docx?|pdf|txt|md)$/i, ''));
+  const left = mxToSign(r).filter(d => !mxDocLocked(r, d) && mxDocSign(r, d)?.st !== 'declined').map(d => d.title.replace(/\.(docx?|pdf|txt|md)$/i, ''));
+  const next = live.length ? (left.length ? ` Next: send ${left.join(' and ')}.` : ' Next: the remaining signatures.') : left.length ? ` Next: send ${left.join(' and ')} for signature.` : '';
+  return [...parts, signed.length ? `${signed.join(' and ')} ${signed.length > 1 ? 'are' : 'is'} signed.` : '', declined.length ? `${declined.join(' and ')} came back declined.` : ''].filter(Boolean).join(' ') + next;
+}
+
+/* the Documents field of New Request, shared with Add a document: our templates and their paper, as
+   tiles while nothing is chosen, then one list of everything chosen with one Add for more. It fills
+   f.templates (template ids) and f.files (File objects) and calls sync() on every change */
+function mxDocsField(f, sync, tpls) {
+  /* the paper it starts from: one of ours, or theirs. A small two-way switch
+     beside the label; under it, either our templates as a list you can open,
+     or a place to drop their document. */
+  const CHEV = '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M4.5 6.5 8 10l3.5-3.5"/></svg>';
+  const TICK = '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m3.5 8.3 2.8 2.8 6.2-6.4"/></svg>';
+  const tplSub = (t) => [t.kind, 'v' + mxTplVer(t)].filter(Boolean).join(' · ');
+  /* our templates: as many as the work needs, each a row you can take out, and one more to add */
+  const tplList = h('div', { class: 'mx-rqf-stack' });
+  const addTpl = h('button', { class: 'mx-rqf-add', type: 'button', 'aria-haspopup': 'listbox', onclick: (e) => { e.stopPropagation(); openTpls(); } });
+  let paintTpl = () => {
+    const chosen = f.templates.map(id => tpls.find(t => t.id === id)).filter(Boolean);
+    tplList.replaceChildren(...chosen.map(t => h('div', { class: 'mx-rqf-item' }, mxTile('tpl'),
+      h('span', { class: 'mx-rqf-pick-t' }, h('span', { class: 'mx-rqf-pick-n' }, t.name), h('span', { class: 'mx-rqf-pick-s' }, tplSub(t))),
+      h('button', { class: 'mx-rqf-file-x', type: 'button', 'aria-label': `Remove ${t.name}`,
+        html: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"><path d="M4.5 4.5l7 7M11.5 4.5l-7 7"/></svg>',
+        onclick: () => { f.templates = f.templates.filter(x => x !== t.id); paintTpl(); sync(); } }))));
+    /* two ways in, each a small tile that says what it is and what it does */
+    const n = f.templates.length;
+    addTpl.replaceChildren(h('span', { class: 'mx-rqf-tile-ic is-tpl' }, mxTile('tpl')),
+      h('span', { class: 'mx-rqf-tile-t' }, h('b', {}, n ? 'Add a template' : 'Our templates'),
+        h('span', {}, n ? `${mxPlural(n, 'template')} chosen` : `${tpls.length} approved, ready to fill`)),
+      h('span', { class: 'mx-rqf-tile-go', html: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M8 3.5v9M3.5 8h9"/></svg>' }));
+  };
+  /* the picker: find one by name, tick as many as the work needs, done */
+  const openTpls = (anchor = addTpl) => {
+    document.querySelector('.mx-tpk')?.remove();
+    const q = h('input', { class: 'mx-tpk-q', type: 'text', placeholder: 'Find a template…', 'aria-label': 'Find a template', autocomplete: 'off' });
+    const list = h('div', { class: 'mx-tpk-list', role: 'listbox', 'aria-multiselectable': 'true' });
+    const count = h('span', { class: 'mx-tpk-n' });
+    const done = h('button', { class: 'pb-btn pb-btn--primary mx-tpk-done', type: 'button', onclick: () => shut() }, 'Done');
+    const pop = h('div', { class: 'mx-tpk mx-tpk--multi' },
+      h('div', { class: 'mx-tpk-head' }, h('span', { class: 'mx-tpk-glass', html: PB_SVG.search }), q),
+      list,
+      h('div', { class: 'mx-tpk-foot' }, count, done));
+    const rows = () => {
+      const t0 = q.value.trim().toLowerCase();
+      const shown = tpls.filter(t => !t0 || (t.name + ' ' + (t.kind || '')).toLowerCase().includes(t0));
+      list.replaceChildren(...(shown.length ? shown.map(t => {
+        const on = f.templates.includes(t.id);
+        return h('button', { class: 'mx-tpk-row' + (on ? ' is-on' : ''), type: 'button', role: 'option', 'aria-selected': String(on),
+          onclick: () => { f.templates = on ? f.templates.filter(x => x !== t.id) : [...f.templates, t.id]; rows(); paintTpl(); sync(); } },
+          h('span', { class: 'mx-tpk-box' + (on ? ' is-on' : ''), html: on ? TICK : '' }),
+          mxTile('tpl'), h('span', { class: 'mx-rqf-pick-t' }, h('span', { class: 'mx-rqf-pick-n' }, t.name), h('span', { class: 'mx-rqf-pick-s' }, tplSub(t))));
+      }) : [h('div', { class: 'mx-tpk-none' }, `No template called “${q.value.trim()}”`)]));
+      count.textContent = f.templates.length ? `${mxPlural(f.templates.length, 'template')} chosen` : 'Choose one or more';
+    };
+    q.oninput = rows;
+    rows();
+    document.body.append(pop);
+    const r = anchor.getBoundingClientRect(), box = (anchor.closest('.mx-rqf-f') || anchor).getBoundingClientRect();
+    pop.style.width = box.width + 'px'; pop.style.left = box.left + 'px';
+    pop.style.top = (innerHeight - r.bottom > pop.offsetHeight + 16 ? r.bottom + 6 : Math.max(12, r.top - pop.offsetHeight - 6)) + 'px';
+    anchor.setAttribute('aria-expanded', 'true');
+    q.focus();
+    const out = (e) => { if (!pop.contains(e.target) && !anchor.contains(e.target)) shut(); };
+    const esc = (e) => { if (e.key === 'Escape') { e.stopPropagation(); shut(); } if (e.key === 'Enter' && document.activeElement === q) { e.preventDefault(); list.querySelector('.mx-tpk-row')?.click(); } };
+    function shut() { pop.remove(); anchor.setAttribute('aria-expanded', 'false'); removeEventListener('mousedown', out, true); removeEventListener('keydown', esc, true); }
+    addEventListener('mousedown', out, true); addEventListener('keydown', esc, true);
+  };
+  paintTpl();
+
+  /* their paper: one document or several, each a row; the drop zone stays under them for more */
+  const take = (list) => { for (const x of list) if (!f.files.some(y => y.name === x.name)) f.files.push(x); paintFile(); sync(); };
+  const fileIn = h('input', { type: 'file', hidden: true, multiple: true, accept: '.docx,.doc,.pdf,.rtf,.txt',
+    onchange: (e) => { take([...e.target.files]); e.target.value = ''; } });
+  const drop = h('div', { class: 'mx-rqf-drop2', role: 'button', tabindex: '0', onclick: () => fileIn.click(),
+    onkeydown: (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); fileIn.click(); } } });
+  const fileList = h('div', { class: 'mx-rqf-stack' });
+  const kb = (n) => !n ? '' : n > 1e6 ? (n / 1e6).toFixed(1) + ' MB' : Math.max(1, Math.round(n / 1e3)) + ' KB';
+  let paintFile = () => {
+    drop.classList.toggle('is-small', f.files.length > 0);
+    drop.replaceChildren(h('span', { class: 'mx-rqf-drop2-ic', html: APM_IC.upload ? '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">' + APM_IC.upload + '</svg>' : '' }),
+      h('span', { class: 'mx-rqf-drop2-t' }, h('b', {}, f.files.length ? 'Add another document' : 'Drop their documents here'), ' or ', h('u', {}, 'browse')),
+      h('span', { class: 'mx-rqf-drop2-s' }, 'Word or PDF'));
+    fileList.replaceChildren(...f.files.map(x => h('div', { class: 'mx-rqf-item' }, mxTile('file', mxExt(x.name)),
+      h('span', { class: 'mx-rqf-pick-t' }, h('span', { class: 'mx-rqf-pick-n' }, x.name), h('span', { class: 'mx-rqf-pick-s' }, kb(x.size) || 'Ready to send')),
+      h('button', { class: 'mx-rqf-file-x', type: 'button', 'aria-label': `Remove ${x.name}`,
+        html: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"><path d="M4.5 4.5l7 7M11.5 4.5l-7 7"/></svg>',
+        onclick: () => { f.files = f.files.filter(y => y !== x); paintFile(); sync(); } }))), drop);
+  };
+  for (const ev of ['dragenter', 'dragover']) drop.addEventListener(ev, (e) => { e.preventDefault(); drop.classList.add('is-over'); });
+  drop.addEventListener('dragleave', () => drop.classList.remove('is-over'));
+  drop.addEventListener('drop', (e) => { e.preventDefault(); drop.classList.remove('is-over'); take([...e.dataTransfer.files]); });
+  paintFile();
+
+  /* one list: the templates chosen and their documents dropped in, together;
+     under it, the two ways to add one more */
+  const stack = h('div', { class: 'mx-rqf-stack' });
+  const upBtn = h('button', { class: 'mx-rqf-tile', type: 'button', onclick: () => fileIn.click() },
+    h('span', { class: 'mx-rqf-tile-ic is-up', html: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 15V4M7.5 8.5 12 4l4.5 4.5"/><path d="M4.5 14.5v4A1.5 1.5 0 0 0 6 20h12a1.5 1.5 0 0 0 1.5-1.5v-4"/></svg>' }),
+    h('span', { class: 'mx-rqf-tile-t' }, h('b', {}, 'Their paper'), h('span', {}, 'Drop or upload Word or PDF')),
+    h('span', { class: 'mx-rqf-tile-go', html: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M8 3.5v9M3.5 8h9"/></svg>' }));
+  addTpl.className = 'mx-rqf-tile';
+  const adds = h('div', { class: 'mx-rqf-tiles' }, addTpl, upBtn);
+  /* nothing yet: the two ways in, as tiles. Something chosen: one quiet list of
+     everything — templates and their files together — and one "Add" that offers both */
+  const more = h('button', { class: 'mx-rqf-more', type: 'button', 'aria-haspopup': 'menu' },
+    h('span', { class: 'mx-rqf-more-ic', html: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M8 3.5v9M3.5 8h9"/></svg>' }), 'Add');
+  more.onclick = (e) => { e.stopPropagation(); menu(more, [
+    { label: 'A template', html: '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="3" width="14" height="18" rx="2.5"/><path d="M8.5 8h7M8.5 12h3.5M14 12h1.5M8.5 16h2M12.5 16h3"/></svg>', run: () => openTpls(more) },
+    { label: 'Their paper', html: '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 15V4M7.5 8.5 12 4l4.5 4.5"/><path d="M4.5 14.5v4A1.5 1.5 0 0 0 6 20h12a1.5 1.5 0 0 0 1.5-1.5v-4"/></svg>', run: () => fileIn.click() },
+  ]); if (openMenu) { openMenu.classList.add('mx-add-menu'); openMenu.style.left = more.getBoundingClientRect().left + 'px'; openMenu.style.zIndex = 200; } };
+  const paintDocs = () => {
+    /* rebuilt from what is chosen each time, templates and files together */
+    _pt(); _pf();
+    const items = [...tplList.querySelectorAll('.mx-rqf-item'), ...fileList.querySelectorAll('.mx-rqf-item')];
+    stack.classList.toggle('has-items', items.length > 0);
+    stack.replaceChildren(...(items.length ? [h('div', { class: 'mx-rqf-list' }, ...items), more] : [adds]), fileIn);
+  };
+  const _pt = paintTpl, _pf = paintFile;
+  paintTpl = () => { _pt(); paintDocs(); };
+  paintFile = () => { _pf(); paintDocs(); };
+  for (const ev of ['dragenter', 'dragover']) stack.addEventListener(ev, (e) => { e.preventDefault(); adds.classList.add('is-over'); });
+  stack.addEventListener('dragleave', () => adds.classList.remove('is-over'));
+  stack.addEventListener('drop', (e) => { e.preventDefault(); adds.classList.remove('is-over'); take([...e.dataTransfer.files]); });
+  paintTpl(); paintFile();
+  return h('div', { class: 'mx-rqf-f' }, h('span', { class: 'mx-rqf-l' }, 'Documents'), stack);
 }
 
 function intakePage(r, opts = {}) {
@@ -1693,10 +1963,11 @@ function intakePage(r, opts = {}) {
   const hasTerms = false;   // Key Terms is built but not shown for now
   const hasSign = SHOW_APPROVALS && !!mxSign(r);
   const hasIssues = SHOW_ISSUES && !!mxIssues(r);
-  let tab = MX.intake.tab && ['summary', 'details', 'terms', 'sign', 'team', 'activity', 'docs', 'issues', 'comments'].includes(MX.intake.tab) ? MX.intake.tab : 'summary';
+  let tab = MX.intake.tab && ['summary', 'details', 'terms', 'sign', 'signing', 'team', 'activity', 'docs', 'issues', 'comments'].includes(MX.intake.tab) ? MX.intake.tab : 'summary';
+
   /* the document whose round is open in the Documents tab, if any */
   let reviewing = MX.intake.review || null; MX.intake.review = null;
-  if ((tab === 'terms' && !hasTerms) || (tab === 'sign' && !(hasSign && INTAKE_FX.approvals)) || (tab === 'issues' && !hasIssues)) tab = 'summary';
+  if ((tab === 'terms' && !hasTerms) || (tab === 'sign' && !(hasSign && INTAKE_FX.approvals)) || (tab === 'issues' && !hasIssues) || (tab === 'signing' && !mxEnvelopes(r).length)) tab = 'summary';
   const ICON = (p, w = 16) => `<svg viewBox="0 0 24 24" width="${w}" height="${w}" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">${p}</svg>`;
 
   /* ── the left: a page about the request ── */
@@ -1735,15 +2006,22 @@ function intakePage(r, opts = {}) {
     h('span', { class: 'rqp-from' }, `From ${r.submitter}`, ...(r.source ? [' via ', h('img', { class: 'rqp-via', src: brandSrc(r.source), alt: '' }), mxChannel(r).name] : [])), h('span', { class: 'mt-sep' }, '·'),
     h('span', { class: 'rqp-due' }, 'Due ', mxDue(r.due, r.status === 'done')),
     waitEl);
-  const stageBtn = mxReqStatusBtn(r);
+  const stageBtn = mxReqStatusBtn(r, () => paintSig?.());
   stageBtn.classList.add('rqp-stage'); stageBtn._paint();
   const controls = h('div', { class: 'rqp-ctl' }, atty, sgOk);
 
   /* the tabs: one rule that travels under the one you are on */
-  const TABS = [['summary', 'Overview'], ['docs', 'Documents'], mxWComments(r).length && ['comments', 'Comments'], hasIssues && ['issues', 'Issues'], INTAKE_FX.approvals && hasSign && ['sign', mxApprovalRules(r).length ? 'Approvals' : 'Signatures'], ['details', 'Details'], hasTerms && ['terms', 'Key Terms'], ['team', 'Deal Team'], ['activity', 'Activity']].filter(Boolean);
+  /* Signatures joins once anything has been sent */
+  const tabList = () => [['summary', 'Overview'], ['docs', 'Documents'], mxWComments(r).length && ['comments', 'Comments'], hasIssues && ['issues', 'Issues'], INTAKE_FX.approvals && hasSign && ['sign', mxApprovalRules(r).length ? 'Approvals' : 'Signatures'], ['details', 'Details'], hasTerms && ['terms', 'Key Terms'], ['team', 'Deal Team'], ['activity', 'Activity']].filter(Boolean);
+  let TABS = tabList();
   const ink = h('span', { class: 'br-ink', 'aria-hidden': 'true' });
-  const tabBtns = TABS.map(([k, label]) => h('button', { class: 'br-tab', type: 'button', role: 'tab', 'data-k': k, onclick: () => setTab(k) },
-    label));
+  const tabBtn = ([k, label]) => h('button', { class: 'br-tab', type: 'button', role: 'tab', 'data-k': k, onclick: () => setTab(k) },
+    label);
+  let tabBtns = TABS.map(tabBtn);
+  /* the tabs again, when one joins (Signatures, after the first send) */
+  const paintTabs = () => { const next = tabList(); if (next.map(x => x[0]).join() === TABS.map(x => x[0]).join()) return;
+    TABS = next; tabBtns = TABS.map(tabBtn); tabs.replaceChildren(...tabBtns, ink);
+    for (const b of tabBtns) b.setAttribute('aria-selected', String(b.dataset.k === tab)); requestAnimationFrame(placeInk); };
   /* once the tabs hold at the top, the request's name shows quietly above them */
   const stuckName = h('div', { class: 'rqp-stuck-t', 'aria-hidden': 'true' });
   let aiFold = false;
@@ -1828,7 +2106,7 @@ function intakePage(r, opts = {}) {
   /* the values, drawn rather than typed out: a face, a ring, a mark */
   const who = (name, sub) => name ? h('span', { class: 'rqv-who' }, mxFace(name, 'pb-av rqv-av'), h('span', {}, name), sub ? h('span', { class: 'rqv-faint' }, sub) : null)
     : h('span', { class: 'rqv-none' }, 'Unassigned');
-  const stageVal = () => { const v = MX_ST.req[r.status] || MX_ST.req.progress; return h('span', { class: 'rqv-who' }, h('span', { class: 'rqv-ring mx-st-mi', style: `color:${v.color}`, html: v.svg }), v.label); };
+  const stageVal = () => { const v = MX_ST.req[r.status] || MX_ST.req.drafting; return h('span', { class: 'rqv-who' }, h('span', { class: 'rqv-ring mx-st-mi', style: `color:${v.color}`, html: v.svg }), mxStLabel(r, r.status)); };
   const priVal = () => h('span', { class: 'rqd-pri' + (r.urgent ? ' is-urgent' : '') }, r.urgent ? 'Urgent' : 'Normal');
   const dueVal = () => {
     if (!r.due) return null;
@@ -1915,7 +2193,7 @@ function intakePage(r, opts = {}) {
   const commentsTab = () => {
     const host = h('div', { class: 'rqp-cpanel rqp-cpanel--tab' });
     const most = docs.reduce((best, x, i) => mxWComments(r).filter(c => c.doc === x.id).length > mxWComments(r).filter(c => c.doc === docs[best].id).length ? i : best, 0);
-    const di0 = MX.intake.cmtDoc != null && docs[MX.intake.cmtDoc] ? MX.intake.cmtDoc : most;
+    const di0 = MX.intake.cmtDoc === -1 && docs.length ? -1 : MX.intake.cmtDoc != null && docs[MX.intake.cmtDoc] ? MX.intake.cmtDoc : most;
     paintCPanel({ into: host, di: di0 });
     return [host];
   };
@@ -2114,6 +2392,90 @@ function intakePage(r, opts = {}) {
      path of marks. A row says who, why they are on it, where it stands;
      the one thing to do next (Approve, Remind, Sign) sits on the row, the
      rest in its ⋯. The section's own actions sit in its heading. */
+  const afterApproval = () => { save(); paintBody(); };
+  /* everything on the page that reads the signing, painted again after any change to it */
+  const afterSign = () => { paintSteps(); stageBtn._paint?.(); paintSig(); paintTabs(); paintDoc(); paintBody(); };
+  /* a small form in a dialog: the fields, then one action */
+  const formDialog = ({ title, lead, fields, action, run }) => {
+    const vals = Object.fromEntries(fields.map(f => [f.k, f.value || '']));
+    const dim = h('div', { class: 'pb-dim mx-rqf-dim', onclick: (e) => { if (e.target === dim) close(); } });
+    const close = () => { dim.classList.add('is-closing'); setTimeout(() => dim.remove(), 150); removeEventListener('keydown', onKey, true); };
+    const onKey = (e) => { if (e.key === 'Escape') { e.stopPropagation(); close(); } };
+    const go = () => { if (fields.some(f => f.need && !String(vals[f.k]).trim())) { pbToast(`Add ${fields.find(f => f.need && !String(vals[f.k]).trim()).label.toLowerCase()}`); return; } close(); run(vals); };
+    dim.append(h('div', { class: 'pb-dlg mx-rqf mx-ss mx-ss-form', role: 'dialog', 'aria-modal': 'true', 'aria-label': title },
+      h('header', { class: 'mx-rqf-head mx-ss-head' }, h('div', {}, h('h2', { class: 'pb-dlg-t' }, title), lead ? h('p', { class: 'mx-ss-sub' }, lead) : null),
+        h('button', { class: 'pbv-icon mx-rqf-x', type: 'button', 'aria-label': 'Close', onclick: close, html: ICON('<path d="M6 6l12 12M18 6 6 18"/>', 14) })),
+      h('div', { class: 'mx-rqf-body mx-ss-bd' }, ...fields.map(f => h('label', { class: 'mx-rqf-f mx-ss-f' }, h('span', { class: 'mx-rqf-l' }, f.label),
+        f.long ? h('textarea', { class: 'mx-rqf-in mx-rqf-ta', rows: '3', oninput: (e) => { vals[f.k] = e.target.value; } }, f.value || '')
+          : h('input', { class: 'mx-rqf-in', type: f.type || 'text', value: f.value || '', oninput: (e) => { vals[f.k] = e.target.value; } })))),
+      h('footer', { class: 'mx-rqf-foot' }, h('button', { class: 'pb-btn', type: 'button', onclick: close }, 'Cancel'),
+        h('button', { class: 'pb-btn pb-btn--primary', type: 'button', onclick: go }, action))));
+    document.body.append(dim); addEventListener('keydown', onKey, true);
+    dim.querySelector('input,textarea')?.focus();
+  };
+  const voidEnv = (e, then) => pbConfirm({ title: 'Void this signature request?', lead: `${mxSignedBy(e)} are told it is cancelled, and ${e.docs.length > 1 ? 'the documents unlock' : 'the document unlocks'} for editing. Anything already signed on it no longer counts.`,
+    items: e.docs.map(y => ({ n: `v${y.v}`, t: (docs.find(d => d.id === y.doc)?.title || '').replace(/\.\w+$/, '') })), action: 'Void', run: () => { mxEnvVoid(r, e); afterSign(); pbToast('Signature request voided'); then?.(); } });
+  const changeSigner = (e, x) => formDialog({ title: 'Change signer', lead: `${x.who} has not signed yet. The new signer gets the request; ${x.who} is told it has moved.`,
+    fields: [{ k: 'name', label: 'Name', value: x.who, need: true }, { k: 'email', label: 'Email', value: x.email, type: 'email', need: true }],
+    action: 'Change signer', run: (v) => { mxEnvChangeSigner(r, e, x, { name: v.name.trim(), title: '', email: v.email.trim() }); afterSign(); pbToast(`${v.name.trim()} will sign instead`); } });
+  const recordDecline = (e, x) => formDialog({ title: `${x.who} declined`, lead: 'The documents come back to negotiation and unlock.', fields: [{ k: 'why', label: 'Their reason', long: true }],
+    action: 'Record decline', run: (v) => { mxEnvDecline(r, e, x, v.why.trim()); afterSign(); pbToast(`${r.id} is back in negotiation`); } });
+  const sgDay = (iso) => new Date(iso).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
+  /* Signatures: each envelope as one object, newest first. Its documents, how far along it is,
+     and the signing order level by level, with what can be done on it underneath */
+  const ENV_IC = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5.5" width="18" height="13" rx="2"/><path d="m3.5 7 8.5 6 8.5-6"/></svg>';
+  const signing = () => {
+    const envs = [...mxEnvelopes(r)].reverse(), co = mxData().ws?.company || 'Lumen Analytics Ltd';
+    const left = docs.filter(d => mxDocRelevant(d) && !mxDocLocked(r, d));
+    const card = (e) => {
+      const st = mxEnvState(e), live = ['out', 'partial', 'expired'].includes(st), { n, ns } = mxEnvCount(e), now = mxEnvNow(e);
+      const ds = e.docs.map(y => ({ y, d: docs.find(z => z.id === y.doc) })).filter(x => x.d);
+      const say = st === 'signed' ? `Signed ${sgDay(e.ended)}` : st === 'voided' ? `Voided ${sgDay(e.ended)}` : st === 'declined' ? `Declined ${sgDay(e.ended)}`
+        : `Sent ${sgDay(e.sent)}`;
+      const signerRow = (x) => {
+        const waitLevel = e.order === 'sequential' && now >= 0 && mxLvl(x) > now;
+        const word = x.state === 'signed' ? `Signed ${sgDay(x.at)}` : x.state === 'declined' ? 'Declined' : x.state === 'skipped' ? 'Not needed'
+          : !live ? 'Not signed' : waitLevel ? 'Next' : x.reminded ? `Reminded ${sgDay(x.reminded)}` : 'Waiting';
+        const b = live && mxCanSign(e, x) ? h('button', { class: 'br-dots rqs-sg-dots', type: 'button', 'aria-label': `More for ${x.who}`, 'data-tip': 'More', html: PB_SVG.dots }) : null;
+        if (b) b.onclick = (ev) => { ev.stopPropagation(); mxGlyphs(); menu(b, [
+          { label: x.who === USER.name ? 'Sign now' : 'Record their signature', icon: 'use', run: () => { mxEnvSign(r, e, x); afterSign(); pbToast(e.state === 'signed' ? 'Everyone has signed' : `${x.who === USER.name ? 'You have' : x.who + ' has'} signed`); } },
+          { label: 'Remind', icon: 'ask', run: () => { x.reminded = mxNow(); mxLog(r, { ev: 'email', what: `reminded ${x.who} to sign` }); afterSign(); pbToast(`Reminded ${x.who}`); } },
+          { label: 'Change signer', icon: 'rename', run: () => changeSigner(e, x) },
+          { rule: true },
+          { label: 'Record a decline', icon: 'trash', danger: true, run: () => recordDecline(e, x) }]); };
+        return h('div', { class: 'rqe-sg is-' + (waitLevel && x.state === 'sent' ? 'next' : x.state) }, mxFace(x.who, 'pb-av rqe-av'),
+          h('span', { class: 'rqe-sg-t' }, h('b', {}, x.who), h('span', {}, [x.title, x.email].filter(Boolean).join(' · '))),
+          h('span', { class: 'rqe-sg-st' }, x.state === 'signed' ? h('span', { class: 'rqe-tick', html: ICON('<path d="m6 12.5 4 4 8-8.5"/>', 12) }) : null, word),
+          b || h('span', { class: 'rqe-pad' }));
+      };
+      const lvs = mxEnvLevels(e);
+      return h('section', { class: 'rqe is-' + st },
+        h('header', { class: 'rqe-h' },
+          h('span', { class: 'rqe-ic', html: ENV_IC }),
+          h('div', { class: 'rqe-h-t' }, h('b', {}, ds.length === 1 ? shortOf(ds[0].d) : `${ds.length} documents`),
+            h('span', {}, `${MX_SIGN_PROVIDER[e.provider] || 'E-signature'} · ${say}`)),
+          h('span', { class: `mx-sgc is-${st === 'signed' ? 'signed' : live ? 'out' : 'draft'}` }, st === 'signed' ? 'Signed' : live ? `${ns} of ${n} signed` : st === 'voided' ? 'Voided' : 'Declined')),
+        live ? h('div', { class: 'rqe-bar', role: 'progressbar', 'aria-valuemin': '0', 'aria-valuemax': String(n), 'aria-valuenow': String(ns) }, h('span', { style: `width:${n ? Math.round(ns / n * 100) : 0}%` })) : null,
+        h('div', { class: 'rqe-docs' }, ...ds.map(({ y, d }) => h('button', { class: 'rqe-doc', type: 'button', onclick: () => openRef({ doc: d.id, v: y.v }) },
+          mxTile('file', mxExt(d.title)), h('span', { class: 'rqe-doc-n' }, shortOf(d)), h('span', { class: 'rqe-doc-v' }, `v${y.v}`)))),
+        e.reason ? h('p', { class: 'rqe-why' }, `“${e.reason}”`) : null,
+        h('ol', { class: 'rqe-lvs' + (e.order === 'sequential' && lvs.length > 1 ? ' is-seq' : '') }, ...lvs.map((lv, i) => {
+          const xs = e.signers.filter(x => mxLvl(x) === i); if (!xs.length) return null;
+          const done = mxLevelDone(e, i);
+          return h('li', { class: 'rqe-lv' + (done ? ' is-done' : now === i && live ? ' is-now' : '') },
+            h('div', { class: 'rqe-lv-h' }, e.order === 'sequential' && lvs.length > 1 ? h('span', { class: 'rqe-lv-n' }, done ? h('span', { html: ICON('<path d="m6 12.5 4 4 8-8.5"/>', 11) }) : String(i + 1)) : null,
+              h('span', {}, xs[0].side === 'them' ? (r.counterparty || 'The other side') : co), xs.length > 1 ? h('span', { class: 'rqe-lv-rule' }, lv.rule === 'any' ? 'Any one signs' : 'All sign') : null),
+            ...xs.map(signerRow));
+        })),
+        live ? h('footer', { class: 'rqe-f' },
+          st === 'expired' ? h('button', { class: 'pb-btn', type: 'button', onclick: () => { mxEnvResend(r, e); afterSign(); pbToast('Sent again'); } }, 'Resend')
+            : h('button', { class: 'pb-btn', type: 'button', onclick: () => { mxEnvRemind(r, e); afterSign(); pbToast('Reminder sent'); } }, 'Remind'),
+          h('button', { class: 'pb-btn rqe-void', type: 'button', onclick: () => voidEnv(e) }, 'Void')) : null);
+    };
+    return [
+      left.length ? h('div', { class: 'rqs-top' }, h('span', { class: 'pb-grow' }), h('button', { class: 'pb-btn rqs-more', type: 'button', onclick: () => openSendSign(left[0].id) }, 'Send for signature')) : null,
+      ...envs.map(card)].filter(Boolean);
+  };
   const approvals = () => {
     const sg = mxSign(r), st = mxStages(r), sAt = st.indexOf('Signing'), last = st.length - 1;
     const d = docs.find(x => x.id === 'd1') || docs[0];
@@ -2253,7 +2615,7 @@ function intakePage(r, opts = {}) {
       : h('section', { class: 'rqc rqg-card rqg-tbl' }, h('p', { class: 'rqg-none' }, r.resolvedBy ? 'No approvals needed. Standard terms on our template.' : 'No approvals needed.'));
 
     /* ── signatures ── */
-    const expired = sg.sent && !sg.signers.every(x => x.state === 'signed') && Date.now() > new Date(sg.sent).getTime() + SIGN_EXPIRES_DAYS * 864e5;
+    const expired = false;   /* 22 Oct: a signature request does not expire */
     const nextSigner = sg.order === 'in order' ? sg.signers.find(x => x.state !== 'signed') : null;
     const sign = (x, who = x.who) => {
       x.state = 'signed'; x.at = mxNow(); add({ what: x.who === USER.name ? 'signed for us' : `recorded ${x.who}’s signature` });
@@ -2359,7 +2721,7 @@ function intakePage(r, opts = {}) {
     };
     return [
       h('div', { class: 'rqp-people rqp-people--flat' }, ...list.map(p => h('div', { class: 'rqp-pc' }, mxFace(p.name, 'pb-av rqp-pc-av'),
-        h('span', { class: 'rqp-person-t' }, h('span', { class: 'rqp-pc-n' }, p.name), h('span', { class: 'rqp-pc-r' }, p.title)),
+        h('span', { class: 'rqp-person-t' }, h('span', { class: 'rqp-pc-n' }, p.name, mxEnvelopes(r).some(e => e.state !== 'voided' && e.signers.some(x => x.who === p.name)) ? h('span', { class: 'rqp-pc-signer' }, 'Signer') : null), h('span', { class: 'rqp-pc-r' }, p.title)),
         /* everything you do with a person, behind their dots */
         (() => {
           const b = h('button', { class: 'br-dots rqp-pc-dots', type: 'button', 'aria-label': `More for ${p.name}`, 'data-tip': 'More', html: PB_SVG.dots });
@@ -2386,9 +2748,13 @@ function intakePage(r, opts = {}) {
     b.onclick = (e) => {
       e.stopPropagation(); mxGlyphs();
       const name = d.title.replace(/\.(docx?|pdf|txt|md)$/i, '');
+      const sx = mxDocSign(r, d), live = sx && ['out', 'partial', 'expired'].includes(sx.st);
       menu(b, [
-        { label: 'Open in Word', html: '<img src="assets/brand/word.svg" alt="" width="16" height="16">', run: () => { openRef({ doc: d.id }); giveFile(); } },
-        { label: 'Download', icon: 'download', run: () => { openRef({ doc: d.id }); giveFile(); pbToast('Downloading'); } },
+        { label: mxDocLocked(r, d) ? 'Open in Word (read only)' : 'Open in Word', html: '<img src="assets/brand/word.svg" alt="" width="16" height="16">', run: () => { openRef({ doc: d.id }); giveFile(); } },
+        { label: sx?.st === 'signed' ? 'Download Signed Copy' : 'Download', icon: 'download', run: () => { openRef({ doc: d.id }); giveFile(); pbToast('Downloading'); } },
+        ...(!mxDocLocked(r, d) ? [{ label: 'Send for Signature', icon: 'share', run: () => openSendSign(d.id) }] : []),
+        ...(live ? [{ label: 'Remind Signers', icon: 'ask', run: () => { mxEnvRemind(r, sx.e); afterSign(); pbToast('Reminder sent'); } },
+          { label: 'Void and Edit', icon: 'rename', run: () => voidEnv(sx.e) }] : []),
         { label: 'Upload a New Version', icon: 'retry', run: () => { openRef({ doc: d.id }); upload(false); } },
         { label: 'Compare', icon: 'compare', run: () => { openRef({ doc: d.id }); compareDialog(); } },
         { label: 'Rename', icon: 'rename', run: () => renameVersion(d, d === docs[di] ? vi : d.versions.length - 1) },
@@ -2522,7 +2888,7 @@ function intakePage(r, opts = {}) {
       ver.onclick = (e) => {
         e.stopPropagation();
         const side = (r.counterparty || 'their').split(/\s+/)[0];
-        const canReview = !d.versions[shown].cmp && shown > 0 && !(mxRounds(r).docs[d.id] || []).some(x => x.v === shown + 1);
+        const canReview = !mxDocLocked(r, d) && !d.versions[shown].cmp && shown > 0 && !(mxRounds(r).docs[d.id] || []).some(x => x.v === shown + 1);
         listFrom(ver, [
           ...d.versions.map((v, k) => k).reverse().map(k => [k === shown, h('span', { class: 'rqp-ver-v' }, `v${k + 1}`), d.versions[k].name + (k === d.versions.length - 1 ? ' · Latest' : ''),
             (() => { const n = (r.activity || []).filter(a => (a.kind === 'note' || a.kind === 'reply') && a.ref?.doc === d.id && a.ref?.v === k + 1).length; return `${pbWhen(d.versions[k].when)} · ${d.versions[k].by}${n ? ` · ${mxPlural(n, 'comment')}` : ''}`; })(),
@@ -2543,6 +2909,7 @@ function intakePage(r, opts = {}) {
         onkeydown: (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openRef({ doc: d.id }); paintBody(); } } },
         mxTile('file', mxExt(d.title)),
         h('span', { class: 'rqp-person-t', 'data-tip': titleOf(d) }, h('span', { class: 'rqp-pc-n' }, shortOf(d)),
+          /* every row says when, the same way; who has signed is in the card on the status icon */
           h('span', { class: 'rqp-pc-r' }, ((w) => /,/.test(w) ? w : `${w}, ${new Date(d.versions[shown].when).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}`)(pbWhen(d.versions[shown].when)))),
         /* its open comments: a click opens the document with them beside it */
         ((cs) => cs.length ? h('button', { class: 'rqp-dc-cmt is-ic', type: 'button', 'data-tip': `${mxPlural(cs.length, 'open comment')}`,
@@ -2551,14 +2918,20 @@ function intakePage(r, opts = {}) {
         /* the negotiation word ("With Brightwell", "3 to answer"), off 15 Oct: rows show only the comment count */
         ((rs) => DOC_ROUND_CHIP && rs ? h('button', { class: 'rqp-dc-round is-' + rs.k, type: 'button', 'data-tip': 'Open the round',
           onclick: (e) => { e.stopPropagation(); openReview(d.id); } }, rs.say) : null)(mxRoundSay(r, d)),
+        /* its status, as a symbol beside the version: hover for who signs and where each stands */
+        docStIc(d),
         ver, docDots(d));
   };
-  const documents = () => reviewing && docs.some(x => x.id === reviewing) && mxRoundOf(r, reviewing) ? review(reviewing) : [
+  /* the other side's changes on a document out for signature are settled: they read, but do not change */
+  const reviewLocked = (id) => { const d = docs.find(x => x.id === id), rv = [].concat(review(id)).filter(Boolean);
+    return d && mxDocLocked(r, d) ? [h('p', { class: 'rqp-ro-note' }, h('span', { html: ICON('<rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/>', 13) }), `${shortOf(d)} is ${mxDocSign(r, d).st === 'signed' ? 'signed' : 'out for signature'}, so these answers are locked. Void the signature request to reopen them.`),
+      h('div', { class: 'rqp-ro' }, ...rv)] : rv; };
+  const documents = () => reviewing && docs.some(x => x.id === reviewing) && mxRoundOf(r, reviewing) ? reviewLocked(reviewing) : [
     docs.length ? h('div', { class: 'rqp-docs rqp-docs--flat' }, pendingCmp ? h('div', { class: 'rqp-dc is-pending', 'aria-busy': 'true' }, mxTile('file', 'docx'),
         h('span', { class: 'rqp-person-t' }, h('span', { class: 'rqp-pc-n' }, pendingCmp.name)),
         h('span', { class: 'rqp-dc-ring', 'aria-label': 'Comparing' })) : null, ...docs.map(docRow)) : h('p', { class: 'rqp-empty' }, 'No documents yet.'),
-    h('button', { class: 'rqp-addsh rqp-addsh--drop', type: 'button', onclick: () => upload(true) },
-      h('span', { class: 'rqp-addsh-ic', html: ICON('<path d="M12 6v12M6 12h12"/>', 14) }), h('span', {}, 'Upload a document')),
+    h('button', { class: 'rqp-addsh rqp-addsh--drop', type: 'button', onclick: () => addDocument() },
+      h('span', { class: 'rqp-addsh-ic', html: ICON('<path d="M12 6v12M6 12h12"/>', 14) }), h('span', {}, 'Add a document')),
   ];
 
   /* Activity: the request's history, day by day, on one thin line. Things
@@ -2727,7 +3100,7 @@ function intakePage(r, opts = {}) {
   const activity = () => { paintLog(); paintCtx(); return [composer, log]; };
 
   const paintBody = () => {
-    body.replaceChildren(...[].concat(tab === 'summary' ? summary() : tab === 'details' ? details() : tab === 'terms' ? terms() : tab === 'sign' ? approvals() : tab === 'team' ? team() : tab === 'docs' ? documents() : tab === 'comments' ? commentsTab() : tab === 'issues' ? issues() : activity()).filter(v => v != null && v !== false));
+    body.replaceChildren(...[].concat(tab === 'summary' ? summary() : tab === 'details' ? details() : tab === 'terms' ? terms() : tab === 'sign' ? approvals() : tab === 'signing' ? signing() : tab === 'team' ? team() : tab === 'docs' ? documents() : tab === 'comments' ? commentsTab() : tab === 'issues' ? issues() : activity()).filter(v => v != null && v !== false));
     body.dataset.tab = tab;
     dock.hidden = tab === 'activity' || tab === 'comments';
   };
@@ -2767,27 +3140,38 @@ function intakePage(r, opts = {}) {
   };
   const dock = h('div', { class: 'rqp-dock' }, h('div', { class: 'mt-ask rqp-ask-bar' }, h('span', { class: 'rqp-ask-ic', html: SPARK_ONE }), ask));
 
+  const markDone = () => mxUnsignedGate(r, 'done', () => { r.status = 'done'; r.updated = mxNow(); save(); add({ ev: 'status', what: `moved this to ${mxStLabel(r, 'done')}` }); mxClose('intake'); go('intake'); pbToast(`${r.id} is ${mxStLabel(r, 'done').toLowerCase()}`); });
   const more = h('button', { class: 'br-dots', type: 'button', 'aria-label': 'More actions', 'data-tip': 'More Actions', html: PB_SVG.dots,
     onclick: (e) => { e.stopPropagation(); mxGlyphs(); menu(more, [
       ...(INTAKE_FX.channel && r.submitter !== USER.name ? [{ label: `Message ${first}`, icon: 'ask', run: () => messageRequester() }] : []),
-      !mxClosed(r) ? { label: 'Mark as Completed', icon: 'use', run: () => { r.status = 'done'; r.updated = mxNow(); save(); add({ ev: 'status', what: 'moved this to Completed' }); mxClose('intake'); go('intake'); pbToast(`${r.id} is completed`); } } : null,
       ...(INTAKE_FX.portal ? [{ label: 'Open Requester View', icon: 'open', run: () => { MX.intake.open = r.id + '/requester'; go('intake'); } }] : []),
-      { label: 'Share', icon: 'share', run: () => { navigator.clipboard?.writeText(location.href).catch(() => {}); pbToast('Link copied. Anyone in legal can open it.'); } },
       { label: 'Copy Link', icon: 'copy', run: () => { navigator.clipboard?.writeText(location.href).catch(() => {}); pbToast('Link copied'); } },
       { rule: true },
       { label: 'Delete Request', icon: 'trash', danger: true, run: () => pbConfirm({ title: `Delete ${r.id}?`, lead: `“${r.title}”, its documents and its history are deleted. ${first} is not told.`,
         action: 'Delete', run: () => { const l = mxIntake(); l.splice(l.indexOf(r), 1); save(); mxClose('intake'); go('intake'); pbToast(`${r.id} deleted`); } }) },
     ]); } });
 
+  /* always there beside the status, quieter than it: the modal says what goes and who signs */
+  /* once nothing is left to send, the same place shows how the signing is going */
+  const sigBtn = h('button', { class: 'rqp-sig', type: 'button' });
+  /* only once the request is out for signature; before that, a document goes from its own ⋯ */
+  /* once the request is Out for signature, the documents to sign are chosen from beside the status */
+  const paintSig = () => { sigBtn.hidden = r.status !== 'signature';
+    sigBtn.replaceChildren(h('span', { class: 'rqp-sig-ic', html: ICON('<path d="M4 20h4L19 9l-4-4L4 16z"/><path d="m13.5 6.5 4 4"/>', 14) }), 'Select docs for signature'); };
+  paintSig();
   const docOpen = h('button', { class: 'br-pane rqp-doc-open', type: 'button', 'data-tip': 'Show document', 'aria-label': 'Show document' },
     h('span', { class: 'br-pane-ic', html: ICON('<path d="M14 3.5H7A1.5 1.5 0 0 0 5.5 5v14A1.5 1.5 0 0 0 7 20.5h10a1.5 1.5 0 0 0 1.5-1.5V8z"/><path d="M14 3.5V8h4.5"/><path d="M8.5 13h7M8.5 16.5h4.5"/>', 16) }));
   const left = h('div', { class: 'rqp-left' }, h('div', { class: 'br-panes rqp-panes' }, docOpen),
     h('div', { class: 'rqp-left-in' },
       h('div', { class: 'br-top' },
-        embed ? h('span', {}) : h('button', { class: 'br-back', type: 'button', onclick: () => { mxClose('intake'); go('intake'); } },
-          h('span', { class: 'br-back-a', html: ICON('<path d="M19 12H5M11 6l-6 6 6 6"/>', 15) }), INTAKE_NAME),
-        h('div', { class: 'br-top-r' }, stageBtn, more)),
-      title, meta, controls, tabs, body),
+        /* the breadcrumb: back to Intake, then this request's number */
+        embed ? h('span', {}) : h('nav', { class: 'rqp-crumbs', 'aria-label': 'Breadcrumb' },
+          h('button', { class: 'br-back', type: 'button', onclick: () => { mxClose('intake'); go('intake'); } },
+            h('span', { class: 'br-back-a', html: ICON('<path d="M19 12H5M11 6l-6 6 6 6"/>', 15) }), INTAKE_NAME),
+          h('span', { class: 'rqp-crumbs-sep', 'aria-hidden': 'true' }, '/'),
+          h('span', { class: 'rqp-crumbs-id', 'aria-current': 'page' }, r.id)),
+        h('div', { class: 'br-top-r' }, stageBtn, sigBtn, more)),
+      title, tabs, body),   /* 22 Oct: the RQ · from · due line and the assignee line under the title are gone; who has it is in the Intake list and Deal Team */
     dock);
   /* once the tabs are holding at the top, a soft edge keeps what slides under from merging into them */
   const leftIn = left.querySelector('.rqp-left-in');
@@ -2802,6 +3186,81 @@ function intakePage(r, opts = {}) {
   const docBtn = h('button', { class: 'rqp-docsw', type: 'button', 'aria-haspopup': 'listbox' });
   const verBtn = h('button', { class: 'rqp-ver', type: 'button', 'aria-haspopup': 'listbox' });
   const banner = h('div', { class: 'rqp-old' });
+  /* ── the document's status, beside its version: one pill; a click says the rest and holds the actions ── */
+  const stPill = h('button', { class: 'rqp-docst', type: 'button', 'aria-haspopup': 'dialog' });
+  const paintStPill = (d) => {
+    const st = mxDocStatus(r, d);
+    stPill.className = 'rqp-docst is-' + st.k;
+    /* the symbol only, as in the list on the left; its name and detail are in the tip, and a click opens the rest */
+    stPill.replaceChildren(mxDocStIcon(st, 'rqp-docst-ic'));
+    stPill.setAttribute('aria-label', `Status: ${st.label}${st.sub ? ', ' + st.sub : ''}`);
+    stPill.dataset.tip = st.sub ? `${st.label} · ${st.sub}` : st.label;
+    stPill.onclick = (e) => { e.stopPropagation(); stPop(d); };
+  };
+  /* the document's signing, in one card: opened by a click on the status beside the version, or by
+     hovering the status on a document's row. Who signs, in what order, where each stands, and the actions */
+  let popHold = null;
+  const stPop = (d, anchor = stPill, hover = false) => {
+    const was = document.querySelector('.rqp-stpop');
+    if (was && was._doc === d.id && was._hover && !hover) { was._hover = false; was.classList.add('is-held'); return; }
+    was?._shut?.();
+    const st = mxDocStatus(r, d), x = mxDocSign(r, d), n = d.versions.length;
+    const pop = h('div', { class: 'rqp-stpop' + (hover ? ' is-hover' : ''), role: 'dialog', 'aria-label': `${shortOf(d)}: ${st.label}` });
+    pop._doc = d.id; pop._hover = hover;
+    const shut = () => { pop.remove(); removeEventListener('mousedown', out, true); removeEventListener('keydown', esc, true); clearTimeout(popHold); };
+    pop._shut = shut;
+    const out = (e) => { if (!pop.contains(e.target) && !anchor.contains(e.target) && !e.target.closest('.pb-dim, .pb-menu, [role="menu"]')) shut(); };
+    const esc = (e) => { if (e.key === 'Escape') { e.stopPropagation(); shut(); } };
+    const act = (label, run, cls = '') => h('button', { class: 'pb-btn ' + cls, type: 'button', onclick: () => { shut(); run(); } }, label);
+    let head = st.label, sub = '', body = [], acts = [];
+    if (st.k === 'out' || st.k === 'signed') {
+      const e = x.e, live = st.k === 'out', now = mxEnvNow(e), lvs = mxEnvLevels(e), co = mxData().ws?.company || 'Lumen Analytics';
+      head = st.k === 'signed' ? `Signed ${sgDay(e.ended)}` : 'Out for signature';
+      const seq = e.order === 'sequential' && lvs.length > 1;
+      body = e.signers.map(y => {
+        const later = live && seq && now >= 0 && mxLvl(y) > now;
+        const word = y.state === 'signed' ? `Signed ${sgDay(y.at)}` : y.state === 'declined' ? 'Declined' : y.state === 'skipped' ? 'Not needed' : !live ? 'Not signed' : later ? 'Next' : 'Waiting';
+        const dots = live && mxCanSign(e, y) ? h('button', { class: 'br-dots rqp-stpop-dots', type: 'button', 'aria-label': `More for ${y.who}`, html: PB_SVG.dots }) : null;
+        if (dots) dots.onclick = (ev) => { ev.stopPropagation(); pop.classList.add('is-held'); pop._hover = false; mxGlyphs(); menu(dots, [
+          { label: y.who === USER.name ? 'Sign now' : 'Record their signature', icon: 'use', run: () => { shut(); mxEnvSign(r, e, y); afterSign(); pbToast(e.state === 'signed' ? 'Everyone has signed' : `${y.who === USER.name ? 'You have' : y.who + ' has'} signed`); } },
+          { label: 'Remind', icon: 'ask', run: () => { shut(); y.reminded = mxNow(); mxLog(r, { ev: 'email', what: `reminded ${y.who} to sign` }); afterSign(); pbToast(`Reminded ${y.who}`); } },
+          { label: 'Change signer', icon: 'rename', run: () => { shut(); changeSigner(e, y); } },
+          { rule: true },
+          { label: 'Record a decline', icon: 'trash', danger: true, run: () => { shut(); recordDecline(e, y); } }]); };
+        return h('div', { class: 'rqp-stpop-p is-' + (later ? 'next' : y.state) }, seq ? h('span', { class: 'rqp-stpop-lv' }, String(mxLvl(y) + 1)) : null, mxFace(y.who, 'pb-av rqp-stpop-av'),
+          h('span', { class: 'rqp-stpop-pt' }, h('b', {}, y.who === USER.name ? 'You' : y.who), h('span', {}, y.side === 'them' ? (r.counterparty || 'Their side') : co)),
+          h('span', { class: 'rqp-stpop-ps' }, y.state === 'signed' ? h('span', { class: 'rqp-stpop-tick', html: ICON('<path d="m6 12.5 4 4 8-8.5"/>', 11) }) : null, word), dots || h('span', { class: 'rqp-stpop-pad' }));
+      });
+      acts = st.k === 'signed'
+        ? [act('Open signed copy', () => { openRef({ doc: d.id }); vi = d.versions.length - 1; paintDoc(); }, 'pb-btn--primary')]
+        : [act('Void', () => voidEnv(e)), act('Remind', () => { mxEnvRemind(r, e); afterSign(); pbToast('Reminder sent'); }, 'pb-btn--primary')];
+    } else {
+      head = 'Draft'; sub = `v${n} can be edited, emailed or sent for signature.`;
+      acts = [act('Send for signature', () => openSendSign(d.id), 'pb-btn--primary')];
+    }
+    pop.append(...[h('div', { class: 'rqp-stpop-h' }, h('b', {}, head), sub ? h('p', {}, sub) : null), body.length ? h('div', { class: 'rqp-stpop-b' }, ...body) : null, acts.length ? h('div', { class: 'rqp-stpop-f' }, ...acts) : null].filter(Boolean));
+    document.body.append(pop);
+    const rr = anchor.getBoundingClientRect(), below = innerHeight - rr.bottom > pop.offsetHeight + 16;
+    pop.style.left = Math.max(12, Math.min(rr.right - pop.offsetWidth, innerWidth - pop.offsetWidth - 12)) + 'px';
+    pop.style.top = (below ? rr.bottom + 6 : Math.max(12, rr.top - pop.offsetHeight - 6)) + 'px';
+    if (anchor === stPill) pop.style.left = Math.max(12, Math.min(rr.left, innerWidth - pop.offsetWidth - 12)) + 'px';
+    /* opened by hovering: it stays while the pointer is on the status or the card, and goes a moment after it leaves */
+    const leave = () => { if (!pop._hover) return; clearTimeout(popHold); popHold = setTimeout(() => { if (pop._hover) shut(); }, 220); };
+    const stay = () => clearTimeout(popHold);
+    pop.addEventListener('mouseenter', stay); pop.addEventListener('mouseleave', leave);
+    anchor.addEventListener('mouseleave', leave, { once: true });
+    addEventListener('mousedown', out, true); addEventListener('keydown', esc, true);
+  };
+  /* a document row's status: hover for the card, click to keep it open */
+  const docStIc = (d) => {
+    const ic = mxDocChip(r, d, 'rqp-dc-st');
+    ic.removeAttribute('data-tip'); ic.setAttribute('role', 'button'); ic.tabIndex = 0;
+    ic.onmouseenter = () => { clearTimeout(popHold); popHold = setTimeout(() => stPop(d, ic, true), 160); };
+    ic.onmouseleave = () => { if (!document.querySelector('.rqp-stpop')) clearTimeout(popHold); };
+    ic.onclick = (e) => { e.stopPropagation(); clearTimeout(popHold); stPop(d, ic, false); };
+    ic.onkeydown = (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); stPop(d, ic, false); } };
+    return ic;
+  };
   const cmpBar = h('div', { class: 'rqp-cmp', hidden: true });
   const scroll = h('div', { class: 'rqp-scroll' }, cmpBar, banner, page);
   const latestIn = (d) => d.versions.length - 1;
@@ -3036,6 +3495,7 @@ function intakePage(r, opts = {}) {
       h('span', { class: 'rqp-ver-c', html: ICON('<path d="m7 10 5 5 5-5"/>', 13) }));
     verBtn.replaceChildren(`v${vi + 1}`, h('span', { class: 'rqp-ver-c', html: ICON('<path d="m7 10 5 5 5-5"/>', 12) }));
     verBtn.title = `${v.name} · ${v.by}`;
+    paintStPill(d);
     banner.hidden = vi === latestIn(d);
     banner.replaceChildren(h('span', {}, `You are looking at v${vi + 1}, ${v.name.toLowerCase()}.`),
       h('button', { class: 'mx-link', type: 'button', onclick: () => { vi = latestIn(d); paintDoc(); } }, `Back to v${d.versions.length}`));
@@ -3056,7 +3516,7 @@ function intakePage(r, opts = {}) {
       page.replaceChildren(...(v.blocks || []).map(b => h({ h1: 'h1', h2: 'h2', p: 'p', meta: 'p' }[b.t] || 'p', { class: { h1: 'doc-h1', h2: 'doc-h2', p: 'doc-p', meta: 'doc-meta rqp-meta-line' }[b.t] || 'doc-p', html: b.v })));
     }
     /* the latest version is edited right here, like a document; older versions and comparisons only read */
-    const editable = vi === latestIn(d) && !v.pdf && !v.none && !v.cmp;
+    const editable = vi === latestIn(d) && !v.pdf && !v.none && !v.cmp && !mxDocLocked(r, d);
     page.contentEditable = editable ? 'true' : 'false'; page.spellcheck = editable;
     page.classList.toggle('is-editable', editable);
     scroll.scrollTop = 0;
@@ -3127,19 +3587,197 @@ function intakePage(r, opts = {}) {
     function shut() { pop.remove(); removeEventListener('mousedown', out, true); removeEventListener('keydown', esc, true); }
     addEventListener('mousedown', out, true); addEventListener('keydown', esc, true);
   };
+  /* Send for signature, from the header: which documents at which versions,
+     and who signs on each side, each signer checked or corrected in place */
+  /* a document in, the two ways New Request offers: drafted from one of our templates, filled
+     with what the request already says, or their paper uploaded */
+  const addDocument = () => {
+    /* a document in, the same way New Request takes them: our templates and their paper, in one field */
+    const tpls = mxData().templates.filter(t => t.status === 'live');
+    const f = { templates: [], files: [] };
+    const dim = h('div', { class: 'pb-dim mx-rqf-dim', onclick: (e) => { if (e.target === dim) close(); } });
+    const close = () => { dim.classList.add('is-closing'); setTimeout(() => dim.remove(), 150); removeEventListener('keydown', onKey, true); };
+    const onKey = (e) => { if (e.key === 'Escape' && !document.querySelector('.mx-tpk')) { e.stopPropagation(); close(); } };
+    const addBtn = h('button', { class: 'pb-btn pb-btn--primary', type: 'button', disabled: true, onclick: () => go2() });
+    const sync = () => { const n = f.templates.length + f.files.length; addBtn.disabled = !n; addBtn.textContent = n > 1 ? `Add ${n} documents` : 'Add document'; };
+    sync();
+    dim.append(h('div', { class: 'pb-dlg mx-rqf', role: 'dialog', 'aria-modal': 'true', 'aria-label': 'Add documents' },
+      h('header', { class: 'mx-rqf-head' }, h('h2', { class: 'pb-dlg-t' }, 'Add documents'),
+        h('button', { class: 'pbv-icon mx-rqf-x', type: 'button', 'aria-label': 'Close', onclick: close, html: ICON('<path d="M6 6l12 12M18 6 6 18"/>', 14) })),
+      h('div', { class: 'mx-rqf-body' }, mxDocsField(f, sync, tpls)),
+      h('footer', { class: 'mx-rqf-foot' }, h('button', { class: 'pb-btn', type: 'button', onclick: close }, 'Cancel'), addBtn)));
+    document.body.append(dim); addEventListener('keydown', onKey, true);
+    async function go2() {
+      addBtn.disabled = true;
+      /* templates become first drafts, filled with what the request already says */
+      const made = f.templates.map(id => tpls.find(t => t.id === id)).filter(Boolean).map(t => {
+        const name = `${r.counterparty || 'Draft'} — ${t.name}`;
+        const d = { id: pbUid('doc'), title: `${name}.docx`, source: t.id, versions: [{ name: 'First draft', by: 'Clavia', when: mxNow(), file: `${name}.docx`,
+          blocks: mxDraftBlocks(t, { counterparty: r.counterparty, counterparty_address: r.address }) }] };
+        docs.push(d); return d;
+      });
+      made.forEach(d => add({ ev: 'version', who: 'Clavia', what: `drafted ${d.title.replace(/\.docx$/, '')} from the template`, ref: { doc: d.id, v: 1 } }));
+      /* their paper is read and kept as it arrived */
+      for (const file of f.files) {
+        const v = await mxIngest(file, { name: 'Uploaded', by: USER.name });
+        const d = mxAddVersion(r, v); made.push(d);
+        add({ ev: 'version', what: `uploaded ${file.name}`, ref: { doc: d.id, v: d.versions.length } });
+      }
+      r.documents = docs; r.updated = mxNow(); save(); close();
+      pbToast(made.length > 1 ? `${made.length} documents added` : `${titleOf(made[0])} added`);
+      MX.intake.tab = 'docs'; MX.intake.openDoc = made[0]?.id; mxOpen('intake', r.id); go('intake');
+    }
+  };
+  /* a sent document takes no new version: void the request first, or wait for the signatures */
+  const lockedSay = (d) => { const x = mxDocSign(r, d);
+    if (x.st === 'signed') return pbToast(`${shortOf(d)} is signed. Add a new document instead.`);
+    pbConfirm({ title: `${shortOf(d)} is out for signature`, lead: `Signers sign exactly v${x.v}. To change it, void the signature request first: ${mxSignedBy(x.e)} are told, and the document unlocks.`,
+      action: 'Void and edit', run: () => { mxEnvVoid(r, x.e); afterSign(); pbToast('Voided. You can edit it now.'); } }); };
+  const openSendSign = (focusId) => {
+    /* what can go: anything not out or signed, at its newest approved version. The list opens with
+       the document you are on (or the one you sent from); the others are one "Add document" away */
+    const sendable = (d) => !mxDocLocked(r, d);
+    const okK = (d) => mxLatestOk(d);
+    const pick0 = docs.find(d => d.id === focusId) || docs[di];
+    const first = pick0 && sendable(pick0) ? pick0 : docs.find(d => sendable(d) && mxDocRelevant(d));
+    const rows = first ? [{ id: first.id, k: okK(first) }] : [];
+    const docOf = (row) => docs.find(d => d.id === row.id);
+    const spare = () => docs.filter(d => sendable(d) && !rows.some(x => x.id === d.id));
+    const nVer = (d) => `${d.versions.length} ${d.versions.length === 1 ? 'version' : 'versions'}`;
+    const tileOf = (d) => mxTile('file', mxExt(d.versions[d.versions.length - 1]?.file || d.title));
+    /* the signers, level by level, from Settings › Signing; their contact from the last envelope, else the CRM */
+    const cfg = mxSignCfg(), co = mxData().ws?.company || 'Lumen Analytics Ltd';
+    const order = cfg.order;
+    const lastEnv = mxEnvelopes(r)[mxEnvelopes(r).length - 1];
+    const lastThem = lastEnv?.signers.find(x => x.side === 'them');
+    const contact = mxPeople(r).find(p => p.side === 'counterparty');
+    const levels = cfg.levels.map(lv => ({ side: lv.side, rule: lv.rule }));
+    const person = (name) => { const p = [...MX_LEGAL, ...MX_STAFF].find(x => x.name === name);
+      return { name, title: (p?.role || '').split(' · ')[0], email: name === USER.name ? USER.email : mxEmail(name) }; };
+    const signers = cfg.levels.flatMap((lv, i) => lv.who.map(w => ({ level: i, them: lv.side === 'them',
+      ...(w === '@contact' ? { name: lastThem?.who || contact?.name || '', title: lastThem?.title || (contact?.role || '').split(' · ')[0], email: lastThem?.email || contact?.email || '' }
+        : w === '@other' ? { name: '', title: '', email: '' } : person(w)) })));
+    let editing = signers.find(s => !s.name || !s.email) || null;
+    const dim = h('div', { class: 'pb-dim mx-rqf-dim', onclick: (e) => { if (e.target === dim) close(); } });
+    const close = () => { dim.classList.add('is-closing'); setTimeout(() => dim.remove(), 150); removeEventListener('keydown', onKey, true); };
+    const onKey = (e) => { if (e.key === 'Escape' && !document.querySelector('.mx-tpk')) { e.stopPropagation(); close(); } };
+    const dlg = h('div', { class: 'pb-dlg mx-rqf mx-ss', role: 'dialog', 'aria-modal': 'true', 'aria-label': 'Send for signature' });
+    dim.append(dlg);
+    const verPick = (btn, row) => listFrom(btn, docOf(row).versions.map((v, k) => [row.k === k, h('span', { class: 'mx-cmp-v' }, `v${k + 1}`), v.name, `${v.by || ''}${v.when ? ' · ' + new Date(v.when).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }) : ''}`,
+      () => { row.k = k; paint(); }]).reverse());
+    /* a list hung from a row, as wide as the box it belongs to */
+    const widen = (btn) => { const pop = document.querySelector('.mx-tpk'), box = btn.closest('.mx-ss-sec')?.querySelector('.mx-ss-box') || btn; if (!pop) return; pop.classList.add('mx-ss-list');
+      const rr = (btn.closest('.mx-ss-doc-r') || box).getBoundingClientRect(), bw = box.getBoundingClientRect(); pop.style.setProperty('--ss-w', bw.width + 'px'); pop.style.left = bw.left + 'px'; pop.style.top = (rr.bottom + 4) + 'px'; };
+    const docPick = (btn, row) => {
+      listFrom(btn, [docOf(row), ...spare()].map(d => [d.id === row.id, tileOf(d), titleOf(d), nVer(d), () => { if (d.id !== row.id) { row.id = d.id; row.k = okK(d); paint(); } }]));
+      widen(btn);
+    };
+    const addDoc = (btn) => {
+      listFrom(btn, spare().map(d => [false, tileOf(d), titleOf(d), nVer(d), () => { rows.push({ id: d.id, k: okK(d) }); paint(); }]));
+      widen(btn);
+    };
+    const docRow = (row) => {
+      const d = docOf(row);
+      return h('div', { class: 'mx-ss-doc is-on' },
+        h('div', { class: 'mx-ss-doc-r' },
+          tileOf(d),
+          h('button', { class: 'mx-ss-pick', type: 'button', 'aria-haspopup': 'listbox', 'data-tip': spare().length ? 'Choose another document' : null, disabled: !spare().length,
+            onclick: (e) => { e.stopPropagation(); docPick(e.currentTarget, row); } },
+            h('span', { class: 'mx-ss-doc-n' }, titleOf(d)), spare().length ? h('span', { class: 'mx-ss-more', html: ICON('<path d="m7 10 5 5 5-5"/>', 14) }) : null),
+          h('button', { class: 'mx-ss-ver', type: 'button', 'data-tip': 'Choose the version to send',
+              onclick: (e) => { e.stopPropagation(); verPick(e.currentTarget, row); } },
+            `v${row.k + 1}`, h('span', { html: ICON('<path d="m7 10 5 5 5-5"/>', 12) })),
+          rows.length > 1 ? h('button', { class: 'mx-ss-del', type: 'button', 'data-tip': 'Remove', 'aria-label': `Remove ${titleOf(d)}`,
+            html: ICON('<path d="M5 7h14M10 7V5h4v2M7 7l1 12h8l1-12"/>', 15), onclick: () => { rows.splice(rows.indexOf(row), 1); paint(); } }) : null));
+    };
+    const field = (s, k, label, type = 'text') => h('label', { class: 'mx-rqf-f mx-ss-f' }, h('span', { class: 'mx-rqf-l' }, label),
+      h('input', { class: 'mx-rqf-in', type, value: s[k], autocomplete: 'off', oninput: (e) => { s[k] = e.target.value; paintFoot(); } }));
+    const signerRow = (s) => {
+      const mates = signers.filter(x => x.level === s.level);
+      return h('div', { class: 'mx-ss-sg' + (editing === s ? ' is-edit' : '') },
+        editing === s
+          ? h('div', { class: 'mx-ss-sg-form' }, field(s, 'name', 'Name'), field(s, 'email', 'Email', 'email'),
+              h('div', { class: 'mx-ss-sg-done' },
+                mates.length > 1 ? h('button', { class: 'pb-btn', type: 'button', onclick: () => { signers.splice(signers.indexOf(s), 1); editing = null; paint(); } }, 'Remove') : null,
+                h('button', { class: 'pb-btn', type: 'button', onclick: () => { s.name = s.name.trim(); s.email = s.email.trim(); s.title = s.title.trim();
+                  if (!s.name || !/^\S+@\S+\.\S+$/.test(s.email)) { pbToast(!s.name ? 'Add a name' : 'Add an email address'); return; } editing = null; paint(); } }, 'Done')))
+          : h('div', { class: 'mx-ss-sg-b' }, mxFace(s.name, 'pb-av mx-ss-sg-av'),
+              h('div', { class: 'mx-ss-sg-who' }, h('b', {}, s.name), h('span', {}, s.email)),
+              h('button', { class: 'pb-btn mx-ss-edit', type: 'button', disabled: !!editing, onclick: () => { editing = s; paint(); } }, 'Edit')));
+    };
+    /* each level: whose it is; in order, numbered */
+    const levelBox = (lv, i) => {
+      const xs = signers.filter(x => x.level === i);
+      return h('div', { class: 'mx-ss-lv' },
+        h('div', { class: 'mx-ss-lv-h' }, order === 'sequential' ? h('span', { class: 'mx-ss-lv-n' }, String(i + 1)) : null,
+          h('b', {}, lv.side === 'them' ? (r.counterparty || 'The other side') : co),
+          h('span', { class: 'pb-grow' }),
+          h('button', { class: 'mx-ss-lv-add', type: 'button', disabled: !!editing, onclick: () => { const s = { level: i, them: lv.side === 'them', name: '', title: '', email: '' }; signers.push(s); editing = s; paint(); } }, '+ Signer')),
+        h('div', { class: 'mx-ss-box' }, ...xs.map(signerRow)));
+    };
+    const foot = h('footer', { class: 'mx-rqf-foot mx-ss-foot' });
+    const paintFoot = () => {
+      const n = rows.length, blocked = rows.find(x => x.k < 0);
+      const why = !n ? 'Add a document' : blocked ? `${titleOf(docOf(blocked))} needs approval first` : editing ? 'Finish the signer you are editing' : '';
+      foot.replaceChildren(h('span', { class: 'pb-grow' }),
+        h('button', { class: 'pb-btn', type: 'button', onclick: close }, 'Cancel'),
+        h('button', { class: 'pb-btn pb-btn--primary', type: 'button', disabled: !!why, 'data-tip': why || null, onclick: send }, n > 1 ? `Send ${n} for signature` : 'Send for signature'));
+    };
+    const paint = () => {
+      dlg.replaceChildren(
+        h('header', { class: 'mx-rqf-head mx-ss-head' }, h('div', {}, h('h2', { class: 'pb-dlg-t' }, 'Send for signature')),
+          h('button', { class: 'pbv-icon mx-rqf-x', type: 'button', 'aria-label': 'Close', onclick: close, html: ICON('<path d="M6 6l12 12M18 6 6 18"/>', 14) })),
+        h('div', { class: 'mx-rqf-body mx-ss-bd' },
+          h('div', { class: 'mx-ss-sec' },
+            h('div', { class: 'mx-ss-l' }, h('span', {}, 'Documents')),
+            !rows.length && !spare().length ? h('p', { class: 'mx-ss-none' }, docs.length ? 'Every document is out for signature or signed.' : 'This request has no documents yet.')
+            : h('div', { class: 'mx-ss-box' }, ...rows.map(docRow),
+                spare().length ? h('button', { class: 'mx-ss-add', type: 'button', onclick: (e) => { e.stopPropagation(); addDoc(e.currentTarget); } },
+                  h('span', { html: ICON('<path d="M12 6v12M6 12h12"/>', 15) }), 'Add document') : null)),
+          h('div', { class: 'mx-ss-sec' },
+            h('div', { class: 'mx-ss-l' }, h('span', {}, 'Signers'),
+              null),
+            h('div', { class: 'mx-ss-lvs' + (order === 'sequential' ? ' is-seq' : '') }, ...levels.map(levelBox)))),
+        foot);
+      paintFoot();
+      dlg.querySelector('.mx-ss-sg.is-edit input')?.focus();
+    };
+    function send() {
+      const items = rows.map(x => ({ d: docOf(x), k: x.k })).filter(x => x.d);
+      const go = () => {
+        const them = signers.find(s => s.them), p = them && mxPeople(r).find(q => q.side === 'counterparty' && q.name === them.name);
+        if (p) { p.email = them.email; if (them.title) p.role = them.title; }
+        mxEnvSend(r, items, signers, { order, levels, provider: cfg.provider });
+        paintSteps(); stageBtn._paint?.(); paintSig(); paintTabs();
+        close(); paintDoc(); paintBody(); pbToast(items.length > 1 ? `${items.length} documents sent for signature` : 'Sent for signature');
+      };
+      /* anything still open on what is going: comments, or the other side's changes not yet answered */
+      const loose = items.flatMap(({ d }) => {
+        const c = mxWComments(r).filter(x => x.doc === d.id && x.status !== 'closed').length;
+        const rd = mxRoundOf(r, d.id), q = rd && !rd.answered ? (rd.points || []).filter(p => !p.decision).length : 0;
+        return c || q ? [{ n: shortOf(d), t: [c && mxPlural(c, 'open comment'), q && `${q} of their changes to answer`].filter(Boolean).join(' · ') }] : [];
+      });
+      if (loose.length) pbConfirm({ title: 'Some of this is still open', lead: `Signers sign exactly what is sent. ${loose.length === 1 ? 'This document has' : 'These documents have'} open points.`,
+        items: loose, action: 'Send anyway', run: go });
+      else go();
+    }
+    paint();
+    document.body.append(dim); addEventListener('keydown', onKey, true);
+  };
+  sigBtn.onclick = () => openSendSign();
   docBtn.onclick = (e) => {
     e.stopPropagation();
     const d = docs[di];
     void d;
     listFrom(docBtn, [
-      ...docs.map((x, i) => [i === di, mxTile('file', mxExt(x.title)), shortOf(x), `v${x.versions.length} · ${pbWhen(x.versions[latestIn(x)].when)}`, () => { di = i; vi = latestIn(x); paintDoc(); }]),
-      [false, h('span', { class: 'rqp-ver-add rqp-ver-add--doc', html: ICON('<path d="M12 6v12M6 12h12"/>', 13) }), 'Add another document', 'Word, PDF or text', () => upload(true)]]);
+      ...docs.map((x, i) => [i === di, mxTile('file', mxExt(x.title)), shortOf(x), `v${x.versions.length} · ${pbWhen(x.versions[latestIn(x)].when)}${((z) => !z || z.st === 'voided' ? '' : ' · ' + (z.st === 'partial' ? `${z.ns} of ${z.n} signed` : MX_SIGN_CHIP[z.st]))(mxDocSign(r, x))}`, () => { di = i; vi = latestIn(x); paintDoc(); }]),
+      [false, h('span', { class: 'rqp-ver-add rqp-ver-add--doc', html: ICON('<path d="M12 6v12M6 12h12"/>', 13) }), 'Add another document', 'From a template, or upload a file', () => addDocument()]]);
   };
   verBtn.onclick = (e) => {
     e.stopPropagation();
     const d = docs[di];
     listFrom(verBtn, [
-      ...d.versions.map((v, i) => i).reverse().map(i => [i === vi, h('span', { class: 'rqp-ver-v' }, `v${i + 1}`), d.versions[i].name + (i === latestIn(d) ? ' · Latest' : ''), (() => { const n = (r.activity || []).filter(a => (a.kind === 'note' || a.kind === 'reply') && a.ref?.doc === d.id && a.ref?.v === i + 1).length; return `${pbWhen(d.versions[i].when)} · ${d.versions[i].by}${n ? ` · ${mxPlural(n, 'comment')}` : ''}`; })(), () => { vi = i; paintDoc(); }]),
+      ...d.versions.map((v, i) => i).reverse().map(i => [i === vi, h('span', { class: 'rqp-ver-v' + (mxDocSign(r, d)?.v === i + 1 && mxDocSign(r, d).st !== 'voided' ? ' is-sent' : '') }, `v${i + 1}`, mxDocSign(r, d)?.v === i + 1 && mxDocSign(r, d).st !== 'voided' ? h('span', { class: 'rqp-ver-pen', html: ICON('<path d="M4 20h4L19 9l-4-4L4 16z"/>', 10) }) : null), d.versions[i].name + (i === latestIn(d) ? ' · Latest' : ''), (() => { const n = (r.activity || []).filter(a => (a.kind === 'note' || a.kind === 'reply') && a.ref?.doc === d.id && a.ref?.v === i + 1).length; const sent = mxDocSign(r, d)?.v === i + 1 && mxDocSign(r, d).st !== 'voided'; return `${sent ? 'Sent for signature · ' : ''}${pbWhen(d.versions[i].when)} · ${d.versions[i].by}${n ? ` · ${mxPlural(n, 'comment')}` : ''}`; })(), () => { vi = i; paintDoc(); }]),
       h('div', { class: 'rqp-vers-rule' }),
       [false, h('span', { class: 'rqp-ver-add', html: ICON('<path d="M12 6v12M6 12h12"/>', 13) }), 'Upload a New Version', '', () => upload(false)],
       [false, h('span', { class: 'rqp-ver-add', html: ICON('<path d="M7 4v16M7 20l-3-3M7 20l3-3M17 20V4M17 4l-3 3M17 4l3 3"/>', 13) }), 'Compare', '', () => compareDialog()]]);
@@ -3147,6 +3785,7 @@ function intakePage(r, opts = {}) {
 
   /* a file in: a new version of the document open, or a document of its own */
   upload = (asNew) => {
+    if (!asNew && docs[di] && mxDocLocked(r, docs[di])) return lockedSay(docs[di]);
     const pick = h('input', { type: 'file', accept: '.docx,.doc,.pdf,.txt,.md,.rtf', style: 'display:none', onchange: async () => {
       const f = pick.files?.[0]; pick.remove(); if (!f) return;
       takeFile(f, !asNew && docs.length ? docs[di] : null);
@@ -3155,6 +3794,7 @@ function intakePage(r, opts = {}) {
   };
   /* a file arrives — picked, or dropped: onto a document it is that document's next version, anywhere else a new document */
   const takeFile = (f, target) => {
+    if (target && mxDocLocked(r, target)) return lockedSay(target);
       /* before it goes in: what changed, in a line, for whoever opens it next */
       uploadNote(f, target, async (note, theirs, vname) => {
         pbToast(`Reading ${f.name}…`);
@@ -3287,7 +3927,8 @@ function intakePage(r, opts = {}) {
     let to = (them.length ? them : ppl.slice(0, 1)).map(p => p.email);
     const side = (r.counterparty || '').split(/\s+/)[0] || 'them';
     /* what goes: document → version index; the one you are reading, at the version you are on */
-    const sel = new Map(docs.length ? [[docs[di].id, vi]] : []);
+    const k0 = docs.length ? vi : -1;
+    const sel = new Map(k0 >= 0 ? [[docs[di].id, k0]] : []);
     let stage = 'compose', touched = false, reading = true;
     const subj = h('input', { class: 'mx-rqf-in mx-em-subj', type: 'text', 'aria-label': 'Subject' });
     const body = h('textarea', { class: 'mx-rqf-in mx-em-body', rows: '9', 'aria-label': 'Message', oninput: () => { touched = true; } });
@@ -3328,7 +3969,7 @@ function intakePage(r, opts = {}) {
       const on = sel.has(d.id), k = sel.has(d.id) ? sel.get(d.id) : d.versions.length - 1;
       return h('div', { class: 'mx-em-doc' + (on ? ' is-on' : '') },
         h('button', { class: 'mx-em-check', type: 'button', role: 'checkbox', 'aria-checked': String(on), 'aria-label': `Attach ${titleOf(d)}`,
-          html: on ? '<svg viewBox="0 0 16 16" width="11" height="11" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m3.5 8.3 2.8 2.8 6.2-6.4"/></svg>' : '', onclick: () => { if (on) sel.delete(d.id); else sel.set(d.id, d.versions.length - 1); draft(); paint(); } }),
+          html: on ? '<svg viewBox="0 0 16 16" width="11" height="11" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m3.5 8.3 2.8 2.8 6.2-6.4"/></svg>' : '', onclick: () => { if (on) sel.delete(d.id); else { if (mxLatestOk(d) < 0) return pbToast(`${titleOf(d)} has no approved version yet`); sel.set(d.id, mxLatestOk(d)); } draft(); paint(); } }),
         mxTile('file', mxExt(d.versions[k]?.file || d.title)),
         h('span', { class: 'mx-em-doc-t' }, h('span', { class: 'mx-em-doc-n' }, titleOf(d)), h('span', { class: 'mx-em-doc-s' }, d.versions[k]?.name || '')),
         h('button', { class: 'mx-em-ver', type: 'button', disabled: !on, 'data-tip': 'Choose the version to send', onclick: (e) => { e.stopPropagation(); verPick(e.currentTarget, d); } },
@@ -3461,7 +4102,10 @@ function intakePage(r, opts = {}) {
      (o.into: the tab's holder, o.di: which document, chosen with the switcher at its top) */
   const paintCPanel = (o = {}) => {
     const tabMode = !!o.into, T = o.into || cpanel;
-    const d = tabMode ? docs[o.di] : docs[di]; if (!d || !T) return;
+    /* the Comments tab can show one document's comments, or every document's at once (o.di === -1) */
+    const all = tabMode && o.di === -1;
+    const d = tabMode ? (all ? docs[0] : docs[o.di]) : docs[di]; if (!d || !T) return;
+    const docOfC = (c) => docs.find(x => x.id === c.doc) || d;
     const vi = tabMode ? d.versions.length - 1 : curVi();
     const repaint = () => tabMode ? paintCPanel(o) : paintCPanel();
     /* in the Comments tab a thread opens in place and its words are found in the document beside it, marked, scrolled to */
@@ -3473,7 +4117,7 @@ function intakePage(r, opts = {}) {
       repaint(); setTimeout(() => markFocus(!!cmtFocus), 60);
     });
     const youOr2 = (n) => n === USER.name ? 'You' : n;
-    const mine = mxWComments(r).filter(c => c.doc === d.id);
+    const mine = mxWComments(r).filter(c => all ? docs.some(x => x.id === c.doc) : c.doc === d.id);
     /* who can be @mentioned: legal and the deal team, not you */
     const PEOPLE = [...new Set([...MX_LEGAL.map(p => p.name), ...mxPeople(r).map(p => p.name)])].filter(n => n && n !== USER.name);
     /* typing @ opens a list of people under the box; arrows, Enter or Tab, or a click puts the name in */
@@ -3504,8 +4148,10 @@ function intakePage(r, opts = {}) {
       }, true);
       ta.addEventListener('blur', () => setTimeout(shut, 120));
     };
-    const here = mine.filter(c => c.v === vi + 1).sort((a, b) => posIn(a) - posIn(b));
-    const elsewhere = mine.filter(c => c.v !== vi + 1).sort((a, b) => b.v - a.v);
+    const here = all ? [] : mine.filter(c => c.v === vi + 1).sort((a, b) => posIn(a) - posIn(b));
+    const elsewhere = all ? [] : mine.filter(c => c.v !== vi + 1).sort((a, b) => b.v - a.v);
+    /* all documents: each document's comments under its name, newest version first */
+    const byDoc = all ? docs.map(x => ({ x, cs: mine.filter(c => c.doc === x.id).sort((a, b) => b.v - a.v) })).filter(g => g.cs.length) : [];
     const notes = onThis();
     /* the playbook analysis construct: a bar of where the comments stand, then search and one filter */
     const forMe = (c) => c.status !== 'closed' && c.to === USER.name;
@@ -3569,7 +4215,7 @@ function intakePage(r, opts = {}) {
       const reassign = (n) => {
         if (n === c.assignee) return;
         const was = { assignee: c.assignee, to: c.to, n: c.thread.length };
-        if (n) { c.assignee = n; c.thread.push({ sys: true, who: USER.name, text: `assigned this to ${n}`, when: mxNow() }); mxLog(r, { ev: 'assign', what: `assigned a comment on ${titleOf(d)} to ${n}`, ref: { doc: d.id, v: c.v } }); }
+        if (n) { c.assignee = n; c.thread.push({ sys: true, who: USER.name, text: `assigned this to ${n}`, when: mxNow() }); mxLog(r, { ev: 'assign', what: `assigned a comment on ${titleOf(docOfC(c))} to ${n}`, ref: { doc: c.doc, v: c.v } }); }
         else { delete c.assignee; c.thread.push({ sys: true, who: USER.name, text: 'unassigned this', when: mxNow() }); }
         save(); repaint(); paintCmtN();
         pbToast(n ? `Assigned to ${n === USER.name ? 'you' : n}` : 'Unassigned', { label: 'Undo', run: () => { if (was.assignee) c.assignee = was.assignee; else delete c.assignee; c.to = was.to; c.thread.length = was.n; if (n) (r.activity || []).pop(); save(); repaint(); paintCmtN(); } });
@@ -3605,7 +4251,7 @@ function intakePage(r, opts = {}) {
             run: () => { if (c.status === v) return; wcSet(c, v); if (v === 'closed' && cmtFocus === c.id) cmtFocus = null; repaint(); paintCmtN(); markFocus(); } }))); } },
           mxStMark(k)); return tg; })(...mxWcState(c)));
       const text = cmtEdit === c ? editBox(c) : h('div', { class: 'wd-t' }, ((at) => [at ? h('span', { class: 'wd-at' }, `@${at === USER.name ? 'You' : at}`) : null, at ? ' ' : null])('at' in c ? c.at : c.to), c.text);
-      const ctx = [c.v !== vi + 1 ? `On v${c.v}` : null, replies.length ? mxPlural(replies.length, 'reply', 'replies') : null].filter(Boolean).join(' · ');
+      const ctx = [c.v !== (tabMode ? docOfC(c).versions.length : vi + 1) ? `On v${c.v}` : null, replies.length ? mxPlural(replies.length, 'reply', 'replies') : null].filter(Boolean).join(' · ');
       if (!on) return h('div', { class: 'wd-card is-' + c.status + (band ? ' has-band' : ''), 'data-cid': c.id, role: 'button', tabindex: '0', onclick: () => openC(c), onkeydown: (e) => { if (e.key === 'Enter') openC(c); } },
         band, head, text, ctx ? h('div', { class: 'wd-ctx' }, ctx) : null);
       const box = c.status !== 'closed' ? h('textarea', { class: 'wd-in', rows: '1', placeholder: '@mention or reply', oninput: (e) => { e.target.style.height = 'auto'; e.target.style.height = Math.min(e.target.scrollHeight + 2, 160) + 'px'; } }) : null;
@@ -3619,7 +4265,7 @@ function intakePage(r, opts = {}) {
         if (handTo) {
           if (!('at' in c)) c.at = c.to; c.to = handTo; c.assignee = handTo; c.status = 'open';   /* the whole thread is theirs now; the comment's own @mention stays as written */
           c.thread.push({ sys: true, who: USER.name, text: `assigned this to ${handTo}`, when: mxNow() });
-          mxLog(r, { ev: 'assign', what: `assigned a comment on ${titleOf(d)} to ${handTo}`, ref: { doc: d.id, v: c.v } });
+          mxLog(r, { ev: 'assign', what: `assigned a comment on ${titleOf(docOfC(c))} to ${handTo}`, ref: { doc: c.doc, v: c.v } });
           save(); pbToast(`Assigned to ${handTo}. It’s with them now.`);
         }
         repaint(); paintCmtN();
@@ -3759,14 +4405,18 @@ function intakePage(r, opts = {}) {
     wBtn.dataset.tip = whoChosen.length ? 'Assignees' : 'All assignees'; wBtn.setAttribute('aria-label', whoChosen.length ? `Assignees: ${whoLabel}` : 'All assignees');
     const qIn = h('input', { type: 'search', placeholder: 'Search', value: cmtQ, 'aria-label': 'Search comments',
       oninput: (e) => { cmtQ = e.target.value; const at = e.target.selectionStart; repaint(); const n = T.querySelector('.rqp-cp-q input'); n.focus(); n.setSelectionRange(at, at); } });
-    const shown = here.filter(vis).length + elsewhere.filter(vis).length;
+    const shown = all ? mine.filter(vis).length : here.filter(vis).length + elsewhere.filter(vis).length;
     /* the Comments tab: which document's comments, and how many are still open on each */
     const docSwitch = () => {
       const openOn = (x) => mxWComments(r).filter(c => c.doc === x.id && c.status !== 'closed').length;
       const btn = h('button', { class: 'rqp-cp-doc', type: 'button', 'aria-haspopup': 'menu',
-        onclick: (e) => { e.stopPropagation(); menu(btn, docs.map((x, i) => ({ label: shortOf(x), key: String(openOn(x) || ''), tick: i === o.di,
-          run: () => { o.di = i; MX.intake.cmtDoc = i; cmtFocus = null; repaint(); } }))); } },
-        mxTile('file', mxExt(d.title)), h('span', { class: 'rqp-cp-doc-n' }, shortOf(d)), h('span', { class: 'rqp-cp-doc-v' }, `v${d.versions.length}`),
+        onclick: (e) => { e.stopPropagation(); menu(btn, [
+          { label: 'All documents', key: String(docs.reduce((n, x) => n + openOn(x), 0) || ''), tick: all, run: () => { o.di = -1; MX.intake.cmtDoc = -1; cmtFocus = null; repaint(); } },
+          { rule: true },
+          ...docs.map((x, i) => ({ label: shortOf(x), key: String(openOn(x) || ''), tick: i === o.di,
+            run: () => { o.di = i; MX.intake.cmtDoc = i; cmtFocus = null; repaint(); } }))]); } },
+        ...(all ? [h('span', { class: 'rqp-cp-doc-all', html: ICON('<path d="M8 4.5h8.5a2 2 0 0 1 2 2V18"/><rect x="5" y="7.5" width="10.5" height="12.5" rx="2"/>', 16) }), h('span', { class: 'rqp-cp-doc-n' }, 'All documents'), h('span', { class: 'rqp-cp-doc-v' }, `${docs.length}`)]
+          : [mxTile('file', mxExt(d.title)), h('span', { class: 'rqp-cp-doc-n' }, shortOf(d)), h('span', { class: 'rqp-cp-doc-v' }, `v${d.versions.length}`)]),
         h('span', { class: 'wd-asg-c', html: ICON('<path d="m7 10 5 5 5-5"/>', 13) }));
       return btn;
     };
@@ -3830,6 +4480,7 @@ function intakePage(r, opts = {}) {
         tabMode || !cmtQuote ? null : draftCard(),
         ...here.filter(vis).map(card),
         ...(elsewhere.filter(vis).length ? [h('div', { class: 'rqp-cp-sec' }, 'On other versions'), ...elsewhere.filter(vis).map(card)] : []),
+        ...byDoc.flatMap(({ x, cs }) => { const v = cs.filter(vis); return v.length ? [h('div', { class: 'rqp-cp-sec rqp-cp-sec--doc' }, mxTile('file', mxExt(x.title)), h('span', {}, shortOf(x)), h('span', { class: 'rqp-cp-sec-n' }, String(v.length))), ...v.map(card)] : []; }),
         /* + Comment opens its box at the foot of the list */
         tabMode || cmtQuote ? null : draftCard(),
         /* the empty state steps aside while a first comment is being written, and returns if it is cancelled */
@@ -3934,14 +4585,14 @@ function intakePage(r, opts = {}) {
   const upBtn = h('button', { class: 'rqp-tool rqp-tool--icon', type: 'button', 'data-tip': 'Upload', 'aria-label': 'Upload', html: ICON('<path d="M12 15.5V3.5M8 7.5l4-4 4 4"/><path d="M4 14v5a1.5 1.5 0 0 0 1.5 1.5h13A1.5 1.5 0 0 0 20 19v-5"/>'),
     onclick: (e) => { e.stopPropagation(); mxGlyphs(); menu(upBtn, [
       { label: `New Version of ${titleOf(docs[di])}`, icon: 'retry', run: () => upload(false) },
-      { label: 'Add Another Document', icon: 'files', run: () => upload(true) }]); } });
+      { label: 'Add Another Document', icon: 'files', run: () => addDocument() }]); } });
   let right;
   const ingesting = (r.ingesting || []).length;
   if (docs.length) {
     right = h('section', { class: 'rqp-right' },
       h('header', { class: 'rqp-bar' },
         h('div', { class: 'rqp-bar-l' }, h('button', { class: 'rqp-back rqp-back--ic', type: 'button', 'data-tip': 'Back to the request', 'aria-label': 'Back to the request', onclick: () => showPanel(false) },
-          h('span', { html: ICON('<path d="M19 12H5M11 6l-6 6 6 6"/>', 15) })), docBtn, verBtn),
+          h('span', { html: ICON('<path d="M19 12H5M11 6l-6 6 6 6"/>', 15) })), docBtn, verBtn, stPill),
         h('div', { class: 'rqp-bar-r' },
           cmtBtn,
           tool('Download', h('span', { html: ICON('<path d="M12 4v11M7.5 10.5 12 15l4.5-4.5"/><path d="M4.5 17v1.5A1.5 1.5 0 0 0 6 20h12a1.5 1.5 0 0 0 1.5-1.5V17"/>') }), () => { giveFile(); pbToast('Downloading'); }, 'rqp-tool--icon'),
@@ -3953,6 +4604,8 @@ function intakePage(r, opts = {}) {
             onclick: () => { if (right.classList.contains('has-cmts')) showPanelNow(false); state.rqDocHidden = true; save(); grid.classList.add('is-doc-hidden'); } }))),
       h('div', { class: 'rqp-docbody' }, scroll, cpanel));
     if (state.rqCmtPanel) right.classList.add('has-cmts');
+    /* just added: open on it */
+    if (MX.intake.openDoc) { const i = docs.findIndex(x => x.id === MX.intake.openDoc); if (i >= 0) { di = i; vi = docs[i].versions.length - 1; } delete MX.intake.openDoc; }
     paintDoc();
   } else if (ingesting) {
     right = h('section', { class: 'rqp-right rqp-right--empty' }, h('div', { class: 'rqp-none' }, quillEl('work', { cls: 'mx-pass-q' }), h('b', {}, `Reading ${r.ingesting[0]}`), h('p', {}, 'It shows here in a moment.')));
@@ -3968,7 +4621,7 @@ function intakePage(r, opts = {}) {
           r.type === 'Advice' ? h('button', { class: 'btn btn--primary', type: 'button', onclick: () => fp.action.run() }, fp.action.label)
           : fp.action.reply ? h('button', { class: 'btn btn--primary', type: 'button', onclick: () => { setTab('activity'); box.value = fp.action.reply; mode = 'reply'; paintMode(); send.disabled = false; box.focus(); } }, fp.action.label)
           : h('button', { class: 'btn btn--primary', type: 'button', onclick: () => fp.action.run() }, fp.action.label),
-          r.type !== 'Advice' ? h('button', { class: 'btn', type: 'button', onclick: () => upload(true) }, 'Upload a Document') : '')));
+          r.type !== 'Advice' ? h('button', { class: 'btn', type: 'button', onclick: () => addDocument() }, 'Add a Document') : '')));
   }
 
   grid = h('div', { class: 'rqp' + (state.rqCmtPanel && docs.length && CMT_FOCUS ? ' is-cmt-focus' : '') + (MX.intake.swap ? ' is-swap' : '') }, left, right);
@@ -4043,13 +4696,13 @@ function intakeView() {
     { k: 'unassigned', label: 'Unassigned', in: (r) => isOpen(r) && !r.attorney && !r.resolvedBy },
     { k: 'mine', label: 'Assigned to Me', in: (r) => isOpen(r) && r.attorney === USER.name },
     ...(INTAKE_FX.following ? [{ k: 'following', label: 'Following', in: (r) => isOpen(r) && !!r.followed && r.attorney !== USER.name }] : []),
-    { k: 'approve', label: 'Needs My Approval', in: (r) => isOpen(r) && mxAwaitsMe(r) }];
+    ];
   if (!st.viewV) { if (st.tab === 'all') st.tab = 'open'; st.viewV = 1; }
   const everything = () => list;
   const TABOF = (r) => !r.attorney && !r.resolvedBy ? 'unassigned' : r.attorney === USER.name ? 'mine' : 'others';
   /* the head both views share: settings, the view toggle, and New Request */
   const head = () => h('div', { class: 'mx-head-ctas' },
-    INTAKE_FX.rules ? h('button', { class: 'pbv-icon mx-rules-btn', type: 'button', 'aria-label': 'Intake settings', 'data-tip': 'Intake Settings', html: MI(GLYPHS.gear), onclick: () => stGo('channels') }) : null,
+    null /* the Intake settings gear is gone (22 Oct); Settings › Intake still holds them */,
     typeof mxViewToggle === 'function' ? mxViewToggle() : null,
     mxCta('New Request', (btn, keyboard) => pbWaysMenu(btn, 'mx-rq-new', [
       { key: 'ai', name: 'Submit with AI', desc: 'Say what you need in your own words, and Clavia fills in the request.',
@@ -4068,8 +4721,8 @@ function intakeView() {
       { key: 'source', label: 'Source', of: (r) => r.source ? mxChannel(r).name : 'Manual',
         mark: (v) => { const id = Object.keys(MX_CHANNEL_NAME).find(k => MX_CHANNEL_NAME[k] === v);
           return id ? h('img', { class: 'mx-fpop-av mx-fpop-logo', src: brandSrc(id), alt: '' }) : h('span', { class: 'mx-fpop-av mx-dlg-q' }, quillEl('static', { cls: 'mx-dlg-qi' })); } },
-      { key: 'stage', label: 'Status', of: (r) => (MX_ST.req[r.status] || MX_ST.req.progress).label, order: (v) => Object.values(MX_ST.req).map(x => x.label).indexOf(v),
-        mark: (v) => { const k = Object.keys(MX_ST.req).find(k => MX_ST.req[k].label === v); return k ? h('span', { class: 'mx-st-mi mx-fpop-st', style: `color:${MX_ST.req[k].color}`, html: MX_ST.req[k].svg }) : null; } },
+      { key: 'stage', label: 'Status', of: (r) => mxStLabel(r, r.status), order: (v) => Object.values(MX_ST.req).map(x => x.label).indexOf(/^(Answered|Sent)$/.test(v) ? 'Signed' : v) + (/^(Answered|Sent)$/.test(v) ? .5 : 0),
+        mark: (v) => { const k = /^(Answered|Sent)$/.test(v) ? 'done' : Object.keys(MX_ST.req).find(k => MX_ST.req[k].label === v); return k ? h('span', { class: 'mx-st-mi mx-fpop-st', style: `color:${MX_ST.req[k].color}`, html: MX_ST.req[k].svg }) : null; } },
       ...(INTAKE_FX.dueCol ? [
         mxDueFilter(),
         { key: 'move', label: 'Waiting on', of: (r) => mxWhoseMove(r), order: (v) => ['Legal', 'Requester', 'Counterparty'].indexOf(v) }] : []),
@@ -4080,14 +4733,14 @@ function intakeView() {
     grid: INTAKE_FX.dueCol ? 'minmax(76px, 1fr) minmax(190px, 2.2fr) minmax(116px, 1fr) minmax(92px, 1fr) minmax(116px, 1fr) minmax(150px, 1fr) minmax(76px, 1fr) minmax(118px, 1fr) minmax(80px, 1fr) 28px'
       : '88px minmax(210px, 3.2fr) minmax(130px, 1.4fr) minmax(100px, 1fr) minmax(120px, 1.1fr) minmax(140px, 1.3fr) minmax(110px, 1fr) 96px 28px',
     cols: INTAKE_FX.columns === 'v2' ? [{ key: 'id', label: 'Request #' }, { key: 'title', label: 'Request' }, { key: 'stage', label: 'Status' }, { key: 'attorney', label: 'Assigned to' },
-      { key: 'submitter', label: 'Submitted by' }, { key: 'created', label: 'Created on' }, { key: 'due', label: 'Due date' }, { key: 'source', label: 'Source' }]
+      { key: 'submitter', label: 'Submitted by' }, { key: 'created', label: 'Created on' }, { key: 'due', label: 'Due date' }]
       : [{ key: 'id', label: 'Request #' }, { key: 'title', label: 'Request' },
       { key: 'counterparty', label: 'Counterparty' }, { key: 'type', label: 'Type' }, { key: 'submitter', label: 'Submitter' },
       { key: 'attorney', label: 'Attorney' }, ...(INTAKE_FX.dueCol ? [{ key: 'due', label: 'Due' }] : []), { key: 'stage', label: 'Stage' }, { key: 'comments', label: 'Comments' }],
     /* the two questions a head of legal asks of this list */
     tabs: TABS, tabOf: TABOF,
     /* the critical fields as dropdowns in place of tabs (INTAKE_FX.drops) */
-    drops: INTAKE_FX.drops ? ['stage', 'attorney', 'submitter', 'source', 'due'] : null,
+    drops: INTAKE_FX.drops ? ['stage', 'attorney', 'submitter', 'due'] : null,
     items: everything,
     text: (r) => [r.id, r.title, r.deal, r.counterparty, r.type, r.team, r.submitter, r.attorney].join(' '),
     /* narrowing the list without leaving it */
@@ -4096,12 +4749,13 @@ function intakeView() {
     cells: (r) => INTAKE_FX.columns === 'v2' ? [
       h('span', { class: 'mx-req-id' }, r.id),
       h('span', { class: 'pb-row-name' }, r.title),
-      mxReqStatusBtn(r, () => setTimeout(t.paint, 420)),
+      /* the status, and once anything is out, how much of it is signed */
+      ((c) => c && c.n && c.signed < c.n && !mxClosed(r) ? h('span', { class: 'mx-st-cell' }, mxReqStatusBtn(r, () => setTimeout(t.paint, 420)), h('span', { class: 'mx-st-count', 'data-tip': `${c.signed} of ${c.n} documents signed` }, `${c.signed}/${c.n} signed`))
+        : mxReqStatusBtn(r, () => setTimeout(t.paint, 420)))(mxSignCount(r)),
       mxAttorneyBtn(r, () => setTimeout(t.paint, 420)),
       h('span', { class: 'mx-dlg' }, mxFace(r.submitter, 'pb-av mx-sb-av'), r.submitter),
       h('span', { class: 'mx-created' }, new Date(r.created).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })),
       mxDue(r.due, mxClosed(r)),
-      h('span', { class: 'mx-srcc' }, r.source ? h('img', { src: brandSrc(r.source), alt: '' }) : h('span', { class: 'mx-dlg-q' }, quillEl('static', { cls: 'mx-dlg-qi' })), r.source ? mxChannel(r).name : 'Manual'),
     ] : [
       h('span', { class: 'mx-req-id' }, r.id),
       h('span', { class: 'pb-row-name' }, r.title),
@@ -4120,12 +4774,9 @@ function intakeView() {
           h('span', { class: 'mx-wc-ic', html: '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M6.5 4.5h11a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H11l-4.2 3.3a.5.5 0 0 1-.8-.4v-2.9h.5a2 2 0 0 1-2-2v-8a2 2 0 0 1 2-2z"/></svg>' }),
           String(act.length)); })(mxWActive(r))],
     open: (r) => mxOpen('intake', r.id),
+    /* a row's ⋯: open it, or delete it (22 Oct: follow and mark-as-done are out) */
     menu: (r, row) => [
       { label: 'Open', icon: 'files', run: () => mxOpen('intake', r.id) },
-      ...(INTAKE_FX.following && r.attorney !== USER.name ? [{ label: r.followed ? 'Unfollow' : 'Follow', icon: 'look', run: () => { r.followed = !r.followed; save(); t.paint();
-        pbToast(r.followed ? `Following ${r.id}` : `Stopped following ${r.id}`, { label: 'Undo', run: () => { r.followed = !r.followed; save(); t.paint(); } }); } }] : []),
-      { label: 'Mark as Completed', icon: 'use', run: () => { const was = r.status; r.status = 'done'; r.updated = mxNow(); save(); mxLog(r, { ev: 'status', what: 'moved this to Completed' }); t.paint();
-        pbToast(`${r.id} is completed`, { label: 'Undo', run: () => { r.status = was; save(); t.paint(); } }); } },
       { rule: true },
       { label: 'Delete', icon: 'trash', danger: true, run: () => mxRemove(list, r, row, 'request', (back) => back && t.paint()) },
     ],
@@ -4185,7 +4836,7 @@ function projectPage(p) {
     ...p.chats.map(c => ({ id: 'chat:' + c.id, type: 'chat', name: c.title, about: c.by.split(' ')[0] + ' asked', updated: c.when, ref: c })),
     ...p.vaults.map(id => mxVault(id)).filter(Boolean).map(v => ({ id: 'vault:' + v.id, type: 'vault', name: v.name, about: mxPlural(v.files.length, 'file'), updated: v.updated, ref: v })),
     ...p.playbooks.map(id => pbFind(id)).filter(Boolean).map(b => ({ id: 'pb:' + b.id, type: 'playbook', name: b.name, about: mxPlural(b.clauses.length, 'clause'), updated: b.updated, ref: b })),
-    ...p.requests.map(id => mxRequest(id)).filter(Boolean).map(r => ({ id: 'req:' + r.id, type: 'request', name: r.title, about: MX_ST.req[r.status].label, updated: r.updated, ref: r })),
+    ...p.requests.map(id => mxRequest(id)).filter(Boolean).map(r => ({ id: 'req:' + r.id, type: 'request', name: r.title, about: mxStLabel(r, r.status), updated: r.updated, ref: r })),
   ];
   const TYPE = { chat: 'Chat', vault: 'Vault', playbook: 'Playbook', request: 'Contract' };
   const tile = { chat: () => h('span', { class: 'mx-tile mx-tile--chat', html: MX_ASK_IC }), vault: () => mxTile('vault'),

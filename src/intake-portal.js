@@ -9,7 +9,7 @@
 function mxRequesterPage(r) {
   const first = r.submitter.split(' ')[0];
   const ch = mxChannel(r);
-  const st = mxStages(r), at = mxStage(r);
+  const at = mxStage(r);
   const day = (iso) => new Date(iso).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
   const when = (iso) => { const d = new Date(iso); return `${day(iso)}, ${d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}`; };
   const legalSide = (who) => who === 'Clavia' || MX_LEGAL.some(p => p.name === who);
@@ -20,8 +20,15 @@ function mxRequesterPage(r) {
   const waiting = () => mxWhoseMove(r) === 'Requester';
   const lastAsk = () => [...said()].reverse().find(a => a.kind === 'reply' && legalSide(a.who));
 
-  const steps = h('ol', { class: 'rqo-steps' }, ...st.map((name, i) => h('li', { class: 'rqo-step' + (i < at ? ' is-past' : i === at ? ' is-now' : '') },
-    h('span', { class: 'rqo-step-dot' }), h('span', { class: 'rqo-step-t' }, name))));
+  /* the path in the request's own statuses (21 Oct). Waiting is a pause on
+     the way, not a step: it shows where the work stopped; Cancelled ends it */
+  const PATH = ['new', 'drafting', 'negotiation', 'signature', 'done'].filter(k => mxStKeys(r).includes(k));
+  const nowK = r.status === 'waiting' ? mxStatusAt(r, at) : r.status;
+  const now = PATH.indexOf(nowK);
+  const steps = r.status === 'cancelled'
+    ? h('p', { class: 'rqo-cancel' }, h('span', { class: 'mx-st-mi', style: `color:${MX_ST.req.cancelled.color}`, html: MX_ST.req.cancelled.svg }), 'Legal has cancelled this request.')
+    : h('ol', { class: 'rqo-steps' }, ...PATH.map((k, i) => h('li', { class: 'rqo-step' + (i < now || (i === now && k === 'done') ? ' is-past' : i === now ? ' is-now' : '') },
+        h('span', { class: 'rqo-step-dot' }), h('span', { class: 'rqo-step-t' }, mxStLabel(r, k), i === now && r.status === 'waiting' ? h('span', { class: 'rqo-step-w' }, ' · Waiting') : null))));
 
   const ask = h('section', { class: 'rqo-ask' });
   const paintAsk = () => {
@@ -54,11 +61,17 @@ function mxRequesterPage(r) {
         : h('div', { class: 'rqo-msg-t' }, a.ev === 'submit' ? (r.detail || 'Submitted the request') : a.what));
   }));
 
+  /* a signed document shows as signed */
   const docs = mxDocuments(r);
-  const docList = h('div', { class: 'rqo-docs' }, ...(docs.length ? docs.map(d => { const v = d.versions[d.versions.length - 1];
-    return h('div', { class: 'rqo-doc' }, mxTile('file', 'doc'),
-      h('span', { class: 'rqo-doc-n' }, d.title.replace(/\.docx?$/i, '')),
-      h('span', { class: 'rqo-doc-v' }, `v${d.versions.length}${v?.when ? ' · ' + day(v.when) : ''}`)); })
+  const live = mxEnvelopes(r).filter(e => ['out', 'partial', 'expired'].includes(mxEnvState(e)));
+  const signLine = live.length ? h('p', { class: 'rqo-signing' }, h('span', { class: 'mx-st-mi', style: `color:${MX_ST.req.signature.color}`, html: MX_ST.req.signature.svg }),
+      `Out for signature with ${[...new Set(live.flatMap(e => e.signers.filter(x => x.side === 'them').map(x => x.who)))].join(' and ') || 'the signers'}. The signed copy will appear here.`)
+    : mxSignCount(r)?.n && mxSignCount(r).signed === mxSignCount(r).n ? h('p', { class: 'rqo-signing is-done' }, h('span', { class: 'mx-st-mi', style: `color:${MX_ST.req.done.color}`, html: MX_ST.req.done.svg }), 'Signed by everyone. The signed copies are below.') : null;
+  const docList = h('div', { class: 'rqo-docs' }, ...(docs.length ? docs.map(d => { const v = d.versions[d.versions.length - 1], x = mxDocSign(r, d);
+    const tag = x && ['out', 'partial', 'expired', 'signed'].includes(x.st) ? mxDocChip(r, d) : null;
+    return h('div', { class: 'rqo-doc' }, mxTile('file', mxExt(v?.file || d.title)),
+      h('span', { class: 'rqo-doc-n' }, d.title.replace(/\.docx?$/i, '')), tag,
+      h('span', { class: 'rqo-doc-v' }, x?.st === 'signed' ? `Signed copy · ${day(v.when)}` : `v${d.versions.length}${v?.when ? ' · ' + day(v.when) : ''}`)); })
     : [h('p', { class: 'rqo-none' }, 'Nothing shared yet. Legal will add documents here as they are ready.')]));
 
   const head = h('div', { class: 'rqo-head' });
@@ -67,7 +80,7 @@ function mxRequesterPage(r) {
     h('h1', { class: 'rqo-title' }, r.title),
     h('div', { class: 'rqo-who' }, r.attorney ? [mxFace(r.attorney, 'pb-av'), h('span', {}, `${r.attorney} has this`)] : h('span', { class: 'rqo-faint' }, 'Waiting to be picked up by legal'),
       h('span', { class: 'mt-sep' }, '·'), waiting() ? h('b', {}, 'Waiting on you') : h('span', {}, 'With legal')),
-    steps);
+    steps, signLine);
 
   paintHead(); paintAsk(); paintTalk();
   return h('div', { class: 'rqo' },

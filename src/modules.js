@@ -122,6 +122,12 @@ const mxExt = (name) => (/\.([a-z0-9]{2,4})$/i.exec(name)?.[1] || 'doc').toLower
 const MX_RING = '<svg viewBox="0 0 16 16"><circle cx="8" cy="8" r="5.9" fill="none" stroke="currentColor" stroke-width="1.5"/></svg>';
 const MX_HALF = '<svg viewBox="0 0 16 16"><circle cx="8" cy="8" r="5.9" fill="none" stroke="currentColor" stroke-width="1.5"/>'
   + '<path d="M8 4.6a3.4 3.4 0 0 1 0 6.8z" fill="currentColor"/></svg>';
+/* negotiation: the ring broken into turns, some taken, some still to come */
+const MX_TURNS = '<svg viewBox="0 0 16 16"><circle cx="8" cy="8" r="5.9" fill="none" stroke="#CFC9BF" stroke-width="1.8" stroke-dasharray="3.2 1.43"/>'
+  + '<circle cx="8" cy="8" r="5.9" fill="none" stroke="currentColor" stroke-width="1.8" stroke-dasharray="3.2 1.43 3.2 1.43 3.2 1.43 3.2 1.43 3.2 20" transform="rotate(-90 8 8)"/></svg>';
+/* out for signature: three quarters filled, the last one waiting on their pen */
+const MX_SIGN = '<svg viewBox="0 0 16 16"><circle cx="8" cy="8" r="5.9" fill="none" stroke="currentColor" stroke-width="1.5"/>'
+  + '<path d="M8 4.6a3.4 3.4 0 1 1-3.4 3.4H8z" fill="currentColor"/></svg>';
 const MX_PAUSE = '<svg viewBox="0 0 16 16"><circle cx="8" cy="8" r="5.9" fill="none" stroke="currentColor" stroke-width="1.5"/>'
   + '<path d="M6.6 5.9v4.2M9.4 5.9v4.2" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>';
 const MX_DONE = '<svg viewBox="0 0 16 16"><circle cx="8" cy="8" r="6.5" fill="currentColor"/>'
@@ -131,11 +137,14 @@ const MX_CANCEL = '<svg viewBox="0 0 16 16"><circle cx="8" cy="8" r="5.9" fill="
 const MX_ST = {
   req: {
     /* a request's status is a task's (15 Oct): picked up, being worked, waiting on someone, finished — or dropped */
-    new:       { label: 'New',         color: '#9A968E', svg: MX_RING },
-    progress:  { label: 'In progress', color: '#C28A1E', svg: MX_HALF },
-    waiting:   { label: 'Waiting',     color: '#7C8AA0', svg: MX_PAUSE },
-    done:      { label: 'Completed',   color: '#3A8457', svg: MX_DONE },
-    cancelled: { label: 'Cancelled',   color: '#B5B0A7', svg: MX_CANCEL },
+    /* 21 Oct: the deal's own words. `done` is kept as the key for Signed, the closed state */
+    new:         { label: 'New',                color: '#9A968E', svg: MX_RING },
+    drafting:    { label: 'Drafting',           color: '#C28A1E', svg: MX_HALF },
+    negotiation: { label: 'Negotiation',        color: '#C28A1E', svg: MX_TURNS },
+    waiting:     { label: 'Waiting',            color: '#7C8AA0', svg: MX_PAUSE },
+    signature:   { label: 'Out for signature',  color: '#3A8457', svg: MX_SIGN },
+    done:        { label: 'Signed',             color: '#3A8457', svg: MX_DONE },
+    cancelled:   { label: 'Cancelled',          color: '#9A968E', svg: MX_CANCEL },
   },
   proj: {
     active: { label: 'Active',  color: '#3A8457', svg: MX_HALF },
@@ -295,11 +304,18 @@ function mxTable(cfg) {
       dropsEl = h('div', { class: 'mx-drops' });
       paintDrops = () => {
         const all = cfg.items().filter(passes);
-        const tl = tabList(), cur = tl.find(t => t.k === st.tab) || tl[0];
+        /* one view can be pinned beside the picker as its own tab (cfg.pinned): it is the one people come back to */
+        const tl0 = tabList(), pin = cfg.pinned && tl0.find(t => t.k === cfg.pinned), tl = tl0.filter(t => t !== pin);
+        const onPin = !!pin && st.tab === pin.k;
+        const cur = tl.find(t => t.k === st.tab) || tl.find(t => t.k === st.lastView) || tl[0];
         const count = (t) => t.k === 'all' ? all.length : all.filter(x => t.in ? t.in(x) : cfg.tabOf(x) === t.k).length;
-        const view = h('button', { class: 'mx-dd is-view', type: 'button', 'aria-haspopup': 'menu',
+        const view = h('button', { class: 'mx-dd is-view' + (onPin ? ' is-off' : ''), type: 'button', 'aria-haspopup': 'menu',
           onclick: (e) => { e.stopPropagation(); mxViewPop({ anchor: e.currentTarget, views: tl.map(t => ({ label: t.label, n: count(t), on: t.k === st.tab, run: () => { st.tab = t.k; paint(); } })) }); } },
           cur.label, h('span', { class: 'mx-dd-n' }, String(count(cur))), h('span', { class: 'mx-dd-c', html: CHEV }));
+        const pinN = pin ? count(pin) : 0;
+        const pinBtn = pin ? h('button', { class: 'mx-dd is-view mx-dd-pin' + (onPin ? ' is-sel' : ''), type: 'button', 'aria-pressed': String(onPin),
+          onclick: () => { if (onPin) st.tab = st.lastView || tl[0].k; else { st.lastView = st.tab; st.tab = pin.k; } paint(); } },
+          pin.label, h('span', { class: 'mx-dd-n' + (pinN ? ' is-due' : '') }, String(pinN))) : null;
         const fields = cfg.drops.map(k => cfg.filters.find(f => f.key === k)).filter(Boolean).map(f => {
           const on = st.filters[f.key] || [];
           const say = on.length ? `${f.label}: ${nameOf(f, on[0])}${on.length > 1 ? ' +' + (on.length - 1) : ''}` : f.label;
@@ -307,7 +323,7 @@ function mxTable(cfg) {
             onclick: (e) => { e.stopPropagation(); openFilters(btn, f.key); } }, say, h('span', { class: 'mx-dd-c', html: CHEV }));
           return btn;
         });
-        dropsEl.replaceChildren(view, h('span', { class: 'mx-drops-sep' }), ...fields);
+        dropsEl.replaceChildren(...[view, pinBtn, h('span', { class: 'mx-drops-sep' }), ...fields].filter(Boolean));
       };
     }
   }

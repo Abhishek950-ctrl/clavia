@@ -118,6 +118,57 @@ function stRulesPage() {
     h('section', { class: 'sx-sec is-first' }, table));
 }
 
+/* ── Signing: who signs, in what order, and through which service ──
+   Signers sit in levels. In order, each level is asked once the one before
+   is complete; at the same time, everyone is asked at once. A level can
+   need all its signers, or any one of them. These are the defaults every
+   send starts from; the send itself can change them. */
+function stSigningPage() {
+  const cfg = mxSignCfg();
+  const people = [...MX_LEGAL, ...MX_STAFF];
+  const co = (mxData().ws?.company) || 'Lumen Analytics Ltd';
+  const box = h('div', {});
+  const seg = (opts, cur, set) => h('div', { class: 'sx-seg', role: 'radiogroup' }, ...opts.map(([k, l]) => h('button', { class: 'sx-seg-b' + (k === cur ? ' is-on' : ''), type: 'button', role: 'radio', 'aria-checked': String(k === cur), onclick: () => { set(k); save(); paint(); } }, l)));
+  const nameOf = (w) => w === '@contact' ? 'Their contact on the request' : w === '@other' ? 'Another signer, named when sending' : w;
+  const subOf = (w) => w.startsWith('@') ? null : (people.find(p => p.name === w)?.role || '').split(' · ')[0];
+  const paint = () => box.replaceChildren(
+    h('section', { class: 'sx-sec is-first' },
+      h('h3', { class: 'sx-ap-h is-first' }, 'Send with'),
+      h('select', { class: 'mx-rqf-in sx-sg-prov', onchange: (e) => { cfg.provider = e.target.value; save(); } }, ...Object.entries(MX_SIGN_PROVIDER).map(([k, l]) => { const o = h('option', { value: k }, l); if (k === cfg.provider) o.selected = true; return o; })),
+      h('h3', { class: 'sx-ap-h' }, 'Signing order'),
+      seg([['sequential', 'In order, level by level'], ['parallel', 'Everyone at the same time']], cfg.order, (k) => { cfg.order = k; }),
+      h('h3', { class: 'sx-ap-h' }, 'Signers'),
+      h('ol', { class: 'sx-sg-levels' }, ...cfg.levels.map((lv, i) => h('li', { class: 'sx-sg-lv' },
+        h('div', { class: 'sx-sg-lv-h' },
+          h('span', { class: 'sx-sg-n' }, cfg.order === 'sequential' ? String(i + 1) : '•'),
+          h('select', { class: 'mx-rqf-in sx-sg-sel', 'aria-label': 'Whose signers', onchange: (e) => { lv.side = e.target.value; lv.who = lv.side === 'them' ? ['@contact'] : [USER.name]; save(); paint(); } },
+            ...[['them', 'The other side'], ['us', co]].map(([k, l]) => { const o = h('option', { value: k }, l); if (k === lv.side) o.selected = true; return o; })),
+          h('select', { class: 'mx-rqf-in sx-sg-sel', 'aria-label': 'How many must sign', onchange: (e) => { lv.rule = e.target.value; save(); paint(); } },
+            ...[['all', 'All of them sign'], ['any', 'Any one of them signs']].map(([k, l]) => { const o = h('option', { value: k }, l); if (k === lv.rule) o.selected = true; return o; })),
+          h('span', { class: 'pb-grow' }),
+          cfg.levels.length > 1 ? h('button', { class: 'sx-sg-x', type: 'button', 'aria-label': 'Remove this level', 'data-tip': 'Remove level', onclick: () => { cfg.levels.splice(i, 1); save(); paint(); } }, '×') : null),
+        h('div', { class: 'sx-sg-who' }, ...lv.who.map((w, j) => h('span', { class: 'sx-sg-p' }, w.startsWith('@') ? h('span', { class: 'sx-sg-av' }, '?') : mxFace(w, 'pb-av sx-sg-face'),
+          h('span', {}, h('b', {}, nameOf(w)), subOf(w) ? h('small', {}, subOf(w)) : null),
+          lv.who.length > 1 ? h('button', { class: 'sx-sg-px', type: 'button', 'aria-label': `Remove ${nameOf(w)}`, onclick: () => { lv.who.splice(j, 1); save(); paint(); } }, '×') : null)),
+          (() => { const b = h('button', { class: 'sx-sg-add', type: 'button' }, '+ Add signer');
+            b.onclick = (e) => { e.stopPropagation();
+              if (lv.side === 'them') { lv.who.push('@other'); save(); paint(); return; }
+              mxPersonPicker(b, people.filter(p => !lv.who.includes(p.name)), (p) => { lv.who.push(p.name); save(); paint(); }); };
+            return b; })())))),
+      h('button', { class: 'pb-btn sx-sg-addlv', type: 'button', onclick: () => { cfg.levels.push({ side: 'us', rule: 'all', who: [USER.name] }); save(); paint(); } }, '+ Add a level'),
+      h('div', { class: 'sx-ap-eg' }, h('b', {}, 'How this one runs'), h('p', {}, stSignSay(cfg, co)))));
+  paint();
+  return h('div', { class: 'sx-page' },
+    stHead('Signing', 'Who signs for each side, in what order, and the service that sends the envelope. Every send starts from this, and can be changed for that send.'),
+    box);
+}
+function stSignSay(cfg, co) {
+  const lv = (x) => `${x.side === 'them' ? 'the other side' : co} (${x.rule === 'any' && x.who.length > 1 ? 'any one of ' + x.who.length : x.who.length > 1 ? 'all ' + x.who.length : 'one signer'})`;
+  return cfg.order === 'sequential'
+    ? `${MX_SIGN_PROVIDER[cfg.provider]} asks ${cfg.levels.map(lv).join(', then ')}. Each is asked once the one before has signed.`
+    : `${MX_SIGN_PROVIDER[cfg.provider]} asks ${cfg.levels.map(lv).join(' and ')} at the same time.`;
+}
+
 /* ── Members ── */
 
 /* ── General ── */

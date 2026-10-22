@@ -6700,3 +6700,7 @@ body[data-bare] .br-pane { display: none; }
 .sugg-it:hover { background: var(--tint); }
 .sugg-ar { flex: none; width: 15px; height: 15px; margin-top: 3px; color: var(--text-faint); }
 .sugg-ar svg { width: 15px; height: 15px; display: block; }
+/* 22 Oct: the chosen row is shaded, and every row keeps the mark's place so counts line up */
+.menu-item.is-on { background: var(--tint, #F4F2EE); font-weight: 500; }
+.menu-key + .menu-tick { margin-left: 8px; }
+.menu-tick.is-blank { visibility: hidden; }

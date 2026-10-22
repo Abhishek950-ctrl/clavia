@@ -285,7 +285,7 @@ function rqSelfMake(d) {
   const file = `${r.counterparty} — Mutual NDA.docx`;
   r.documents = [{ id: 'd1', title: file, source: 'mutual-nda', versions: [{ name: 'Ready to sign', by: 'Clavia', when, file, blocks: mxDraftBlocks(tpl, vals), note: 'Our Mutual NDA template, every field filled in, nothing changed' }] }];
   r.resolvedBy = 'Clavia'; r.triaged = true;
-  r.stage = Math.max(0, mxStages(r).indexOf('Signing')); r.status = 'progress';
+  r.stage = Math.max(0, mxStages(r).indexOf('Signing')); r.status = 'signature';
   r.sign = { v: 2, stages: [], order: 'in order', cc: [], sent: when, doc: { doc: 'd1', v: 1 },
     signers: [{ who: d.contact?.name || null, what: `Signs for ${r.counterparty}`, state: 'viewed', viewed: when, at: null, reminded: null }, { who: USER.name, what: 'Signs for us', state: 'sent', at: null, reminded: null }] };
   r.activity = [
