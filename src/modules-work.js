@@ -3195,7 +3195,9 @@ function intakePage(r, opts = {}) {
     stPill.replaceChildren(mxDocStIcon(st, 'rqp-docst-ic'));
     stPill.setAttribute('aria-label', `Status: ${st.label}${st.sub ? ', ' + st.sub : ''}`);
     stPill.dataset.tip = st.sub ? `${st.label} · ${st.sub}` : st.label;
-    stPill.onclick = (e) => { e.stopPropagation(); stPop(d); };
+    /* the card only once the document has gone out for signature; a draft keeps just its tip */
+    stPill.onclick = st.k === 'draft' ? null : (e) => { e.stopPropagation(); stPop(d); };
+    stPill.classList.toggle('is-static', st.k === 'draft');
   };
   /* the document's signing, in one card: opened by a click on the status beside the version, or by
      hovering the status on a document's row. Who signs, in what order, where each stands, and the actions */
@@ -3205,6 +3207,7 @@ function intakePage(r, opts = {}) {
     if (was && was._doc === d.id && was._hover && !hover) { was._hover = false; was.classList.add('is-held'); return; }
     was?._shut?.();
     const st = mxDocStatus(r, d), x = mxDocSign(r, d), n = d.versions.length;
+    if (st.k === 'draft') return;
     const pop = h('div', { class: 'rqp-stpop' + (hover ? ' is-hover' : ''), role: 'dialog', 'aria-label': `${shortOf(d)}: ${st.label}` });
     pop._doc = d.id; pop._hover = hover;
     const shut = () => { pop.remove(); removeEventListener('mousedown', out, true); removeEventListener('keydown', esc, true); clearTimeout(popHold); };
@@ -3254,6 +3257,7 @@ function intakePage(r, opts = {}) {
   /* a document row's status: hover for the card, click to keep it open */
   const docStIc = (d) => {
     const ic = mxDocChip(r, d, 'rqp-dc-st');
+    if (mxDocStatus(r, d).k === 'draft') return ic;
     ic.removeAttribute('data-tip'); ic.setAttribute('role', 'button'); ic.tabIndex = 0;
     ic.onmouseenter = () => { clearTimeout(popHold); popHold = setTimeout(() => stPop(d, ic, true), 160); };
     ic.onmouseleave = () => { if (!document.querySelector('.rqp-stpop')) clearTimeout(popHold); };

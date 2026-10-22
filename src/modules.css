@@ -3765,6 +3765,8 @@ html.vt-cmts::view-transition-new(rqp-doc), html.vt-cmts::view-transition-new(rq
 .rqp-bar-l .rqp-docsw { min-width: 118px; }
 .rqp-docst { flex: none; }
 .rqp-docst { width: 28px; height: 28px; padding: 0; justify-content: center; margin-left: 2px; }
+.rqp-docst.is-static { cursor: default; }
+.rqp-docst.is-static:hover { filter: none; }
 .rqp-docst-ic.mx-dst, .rqp-docst-ic.mx-dst svg { width: 16px; height: 16px; }
 
 /* ── signing details in Documents (22 Oct): the hover card on a row's status, and its one-line summary ── */
