@@ -2658,6 +2658,87 @@ render();
 </script>
 
 <style>
+/* v32: when a field's definition changes, what happens to values already filled in */
+.r3chg{background:#faf9f7;border-radius:10px;padding:10px 14px;font-size:12.5px;line-height:1.6;color:#2b2a28}
+.r3chg div{display:flex;gap:8px}.r3chg div::before{content:"•";color:#8e8a86}
+.r3warn{margin-top:10px;font-size:12px;color:#9a5f14;background:#fbf3e4;border-radius:8px;padding:8px 12px;line-height:1.5}
+.r3map{border:1px solid #ecebe7;border-radius:12px;overflow:hidden}
+.r3mr{display:grid;grid-template-columns:minmax(0,1fr) 170px;gap:10px;align-items:center;padding:8px 10px 8px 14px;border-top:1px solid #f0efeb;font-size:12.5px}
+.r3mr:first-child{border-top:0}.r3mr small{display:block;font-size:11px;color:#8e8a86}
+#sbody .rtr.fd small.fdre{display:block;margin-top:2px;font-size:11px!important;color:#2f6b3d!important}
+#sbody .rtr.fd small.fdre.run{color:#9a5f14!important}
+.fdlast{margin-top:16px;font-size:11.5px;color:#6f6c68;background:#faf9f7;border-radius:10px;padding:9px 12px;line-height:1.5}
+</style>
+<script>
+/* ===== v32: changing a field's definition — what happens to values already filled in =====
+   Done on a field that is in use, after its type, values, wording or threshold changed, asks
+   once what to do with the documents that already have a value. Values a person checked are
+   never overwritten, whatever is picked. */
+var r3Num = s => +String(s||'0').replace(/[^0-9]/g,'') || 0;
+var r3Seed = s => [...String(s)].reduce((a,c)=>a+c.charCodeAt(0),0);
+var R3_SCOPE = ['Open requests and contracts not yet signed','Every document, including signed contracts','Signed in the last 12 months, and everything open'];
+function r3Diff(k, was, now){ const out = [];
+  if(was.k !== now.k) out.push(`Type: ${was.k} → ${now.k}`);
+  if((was.how||'') !== (now.how||'')) out.push('How Clavia finds it was rewritten');
+  if((was.pct||'95%') !== (now.pct||'95%')) out.push(`Fills it in by itself at ${was.pct||'95%'} sure → ${now.pct||'95%'}`);
+  const a = was.opts||[], b = now.opts||[], gone = a.filter(v=>!b.includes(v)), added = b.filter(v=>!a.includes(v));
+  if(gone.length) out.push(`Values removed: ${gone.join(', ')}`); if(added.length) out.push(`Values added: ${added.join(', ')}`);
+  return { out, gone }; }
+function r3Total(k){ return fUsers(k).reduce((n,t)=>n + r3Num(t.cnt), 0); }
+function retroDlg(){ const o = ST.retro, k = o.k, f = FL[k], total = r3Total(k), filled = Math.round(total*0.92);
+  const bad = o.typeChanged && f.k !== 'Text' ? Math.max(3, Math.round(filled*0.03)) : 0;
+  const eg = {'Date':'like “early next year” for a date','Number':'like “two years” for a number','Amount':'like “a few thousand” for an amount','Yes or no':'like “depends” for yes or no','Pick from a list':'any value that isn’t on the list','File':'any value that isn’t a file'}[f.k] || 'like “two years” for a number';
+  const scopeN = o.scope===R3_SCOPE[0] ? Math.round(filled*0.18) : o.scope===R3_SCOPE[2] ? Math.round(filled*0.41) : filled;
+  const opt3 = [['keep','Keep the values already filled in','Only documents that come in from now on use the new definition. Nothing already filled in changes.'],
+    ['suggest','Re-check them, and ask before changing anything','Clavia reads those documents again. Where it finds something different, the old value stays and the new one waits as a suggestion for a person to accept.'],
+    ['update','Re-check them, and update what Clavia filled in','Clavia replaces the values it filled in itself. Values a person checked are never overwritten.']];
+  return dlg(`“${esc(k)}” is already filled in on ${filled.toLocaleString('en-GB')} documents`, 'You changed how this field is defined. Pick what happens to the values already there.', `
+    <div class="r3chg">${o.changes.map(c=>`<div>${esc(c)}</div>`).join('')}</div>
+    <div class="lab" style="margin-top:16px">Existing values</div>
+    <div class="hbg">${opt3.map(([v,t,ds])=>`<button class="hbo${o.mode===v?' on':''}" data-a="r3:mode:${v}"><span class="optr"></span><span><span class="n">${t}${v==='suggest'?' <span class="tag" style="margin-left:4px">Recommended</span>':''}</span><span class="d">${ds}</span></span></button>`).join('')}</div>
+    ${o.mode!=='keep'?`<div class="lab" style="margin-top:16px">Which documents</div><select class="in" data-r3="scope">${R3_SCOPE.map(s=>`<option${s===o.scope?' selected':''}>${esc(s)}</option>`).join('')}</select>
+      <div class="dim" style="font-size:11.5px;margin-top:4px">${scopeN.toLocaleString('en-GB')} documents would be re-checked.${o.scope===R3_SCOPE[1]?' Signed contracts keep their signed copy; only the field on the contract page changes.':''}</div>`:''}
+    ${o.gone.length?`<div class="lab" style="margin-top:16px">Values you removed</div><div class="r3map">${o.gone.map(v=>{ const n = 3 + r3Seed(v)%40; const left = (f.opts||[]); const cur = o.map[v] || 'Leave it as it is';
+      return `<div class="r3mr"><span>${esc(v)}<small>On ${n} documents</small></span><select class="in mini" data-r3="map.${esc(v)}">${['Leave it as it is'].concat(left.map(x=>'Change to '+x)).concat(['Clear it, a person fills it in']).map(x=>`<option${x===cur?' selected':''}>${esc(x)}</option>`).join('')}</select></div>`; }).join('')}</div>`:''}
+    ${bad && o.mode!=='keep'?`<div class="r3warn">About ${bad} values can't be read as ${esc(f.k)}, ${eg}. Those go to a person to fix, whichever option you pick.</div>`:''}`,
+    `<button class="lnk" data-a="r3:back" style="margin-right:auto">Back to the field</button>${B('Save and apply','r3:save','dk')}`, 600); }
+const _r3Ov = overlay;
+overlay = function(){ if(ST.retro) return retroDlg(); return _r3Ov(); };
+const _r3Dlg = fdDlg;
+fdDlg = function(){ let h = _r3Dlg(); const o = ST.fd; if(!o || o.isNew) return h; const k = FLK()[o.i], r = FL[k] && FL[k].retro; if(!r) return h;
+  const line = `<div class="fdlast">Last changed ${r.at}. ${r.mode==='keep'?'Values already filled in were kept.':r.done<r.total?`Re-checking ${r.total.toLocaleString('en-GB')} documents, ${Math.round(r.done/r.total*100)}% done.`:`Re-checked ${r.total.toLocaleString('en-GB')} documents${r.review?`, ${r.review} waiting for a person`:''}.`}</div>`;
+  return h.replace('</div><div class="df">', () => line + '</div><div class="df">'); };
+const _r3Row = fdRow;
+fdRow = (k, i) => { const h = _r3Row(k, i), r = FL[k] && FL[k].retro; if(!r || r.mode==='keep') return h;
+  const s = r.done<r.total ? `<small class="fdre run">Re-checking older documents · ${Math.round(r.done/r.total*100)}%</small>` : `<small class="fdre">Re-checked ${r.total.toLocaleString('en-GB')} documents${r.review?` · ${r.review} to review`:''}</small>`;
+  return h.replace(`<b>${esc(k)}</b>`, `<b>${esc(k)}</b>${s}`); };
+var r3Timer = null;
+function r3Run(k){ clearInterval(r3Timer); r3Timer = setInterval(()=>{ const r = FL[k] && FL[k].retro; if(!r){ clearInterval(r3Timer); return; }
+  r.done = Math.min(r.total, r.done + Math.ceil(r.total/6)); if(r.done>=r.total){ clearInterval(r3Timer); if(ST.page==='types') toast(`“${k}” re-checked on ${r.total.toLocaleString('en-GB')} documents${r.review?`. ${r.review} wait for a person.`:''}`); else render(); return; }
+  if(ST.page==='types') render(); }, 900); }
+const _r3Act = act;
+act = function(s){
+  if(s==='close' && ST.retro){ ST.retro = null; return render(); }
+  if(s==='close' && ST.fd && !ST.fd.isNew && !ST.retro && ST.fd.snap){ const k = FLK()[ST.fd.i], was = JSON.parse(ST.fd.snap).FL[k], now = FL[k];
+    if(was && now && fUsers(k).length){ const d = r3Diff(k, was, now);
+      if(d.out.length){ ST.retro = {k, changes:d.out, gone:d.gone, typeChanged: was.k!==now.k, mode:'suggest', scope:R3_SCOPE[0], map:{}, fd:ST.fd}; return render(); } } }
+  if(!s.startsWith('r3:')) return _r3Act(s);
+  const o = ST.retro, [, x, y] = s.split(':');
+  if(x==='mode'){ o.mode = y; return render(); }
+  if(x==='back'){ ST.retro = null; return render(); }
+  if(x==='save'){ const k = o.k, filled = Math.round(r3Total(k)*0.92), n = o.mode==='keep' ? 0 : o.scope===R3_SCOPE[0] ? Math.round(filled*0.18) : o.scope===R3_SCOPE[2] ? Math.round(filled*0.41) : filled;
+    const review = o.mode==='keep' ? 0 : Math.round(n*(o.mode==='suggest'?0.06:0.02)) + (o.typeChanged && FL[k].k!=='Text'?Math.max(3,Math.round(filled*0.03)):0);
+    FL[k].retro = {mode:o.mode, scope:o.scope, total:n, done:0, review, at:'today', map:o.map};
+    ST.retro = null; ST.fd = null;
+    if(o.mode==='keep'){ render(); return toast(`Saved. Values already filled in for “${k}” stay as they are.`); }
+    r3Run(k); render(); return toast(`Saved. Re-checking “${k}” on ${n.toLocaleString('en-GB')} documents.`); }
+  return render(); };
+document.addEventListener('change', ev => { const el = ev.target, id = el.dataset && el.dataset.r3; if(!id || !ST.retro) return; ev.stopImmediatePropagation();
+  if(id==='scope') ST.retro.scope = el.value; else if(id.startsWith('map.')) ST.retro.map[id.slice(4)] = el.value; render(); }, true);
+document.addEventListener('keydown', ev => { if(ev.key==='Escape' && ST.retro){ ev.stopImmediatePropagation(); ST.retro = null; render(); } }, true);
+render();
+</script>
+<style>
 /* inside the Clavia app: only the Settings window, over the real app */
 html,body{background:transparent!important}
 .wrap,.framebox,.frame{background:transparent!important;box-shadow:none!important}
