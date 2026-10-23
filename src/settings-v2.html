@@ -860,18 +860,18 @@ const IC = {
 };
 
 /* ===== Clavia settings v4: simple version ===== */
-const PEOPLE = { PS:['Priya Shah','Legal operations','Legal','Admin','priya.shah@lumen.io'], GC:['Grace Coleman','Head of legal','Legal','Admin','grace.coleman@lumen.io'],
+const PEOPLE = { RB:['Roger Bennett','General counsel','Legal','Admin','roger.bennett@lumen.io'], GC:['Grace Coleman','Head of legal','Legal','Admin','grace.coleman@lumen.io'],
   AM:['Ana Mehta','Lawyer','Legal','Lawyer','ana.mehta@lumen.io'], TF:['Tom Fisher','Finance director','Finance','Approver','tom.fisher@lumen.io'], RV:['Rahul Verma','Salesperson','Sales','Member','rahul.verma@lumen.io'] };
 const NAV = [['', [['general','General'],['notif','Notifications'],['memory','Memory'],['connectors','Connectors'],['app','Get App & Extension']]],
   ['Admin', [['members','Members'],['requests','Requests'],['approvals','Approvals'],['details','Contract details'],['sign','Signing'],['security','Security'],['plan','Plan & billing']]]];
 const TYPES = ['NDA','Customer contract','Reseller agreement'];
 const PL = {'NDA':'NDAs','Customer contract':'customer contracts','Reseller agreement':'reseller agreements','All contracts':'all contracts'};
 const D0 = {
-  me:{name:'Priya Shah', call:'Priya', job:'Legal operations', team:'Legal'}, org:{ws:'Lumen Legal', co:'Lumen Analytics Ltd', dom:'lumen.io'},
+  me:{name:'Roger Bennett', call:'Roger', job:'General counsel', team:'Legal'}, org:{ws:'Lumen Legal', co:'Lumen Analytics Ltd', dom:'lumen.io'},
   notif:[['Someone needs my OK',1],['A contract I look after is signed',1],['The other company sends changes',1],['A renewal date is coming up',1],['Someone mentions me',1]], notifWhere:'Slack and email', backup:'Ana Mehta',
   mem:{chats:1, learn:1, items:[['Grace wants the limit for leaked data kept at two years\' fees.','From a chat about Brightwell'],['Most partners get a 20% discount.','Learned from 12 signed reseller agreements'],['I prefer short summaries with the key numbers first.','Added by you']]},
   con:[['S','#611f69','Slack','Search conversations, channels, and history'],['G','#c5221f','Gmail','Send and manage emails.'],['D','#188038','Google Drive','Store, organize, and share files.'],['C','#1a73e8','Google Calendar','Manage Google Calendar events, meetings, and availability'],['S','#00a1e0','Salesforce','Fill contracts with customer and deal details']],
-  members:[['GC','Grace Coleman','grace.coleman@lumen.io','Admin'],['PS','Priya Shah','priya.shah@lumen.io','Admin'],['AM','Ana Mehta','ana.mehta@lumen.io','Lawyer'],['EP','Elena Petrova','elena.petrova@lumen.io','Lawyer'],['TF','Tom Fisher','tom.fisher@lumen.io','Approver'],['RV','Rahul Verma','rahul.verma@lumen.io','Member'],['MI','Meera Iyer','meera.iyer@lumen.io','Member']],
+  members:[['GC','Grace Coleman','grace.coleman@lumen.io','Admin'],['RB','Roger Bennett','roger.bennett@lumen.io','Admin'],['AM','Ana Mehta','ana.mehta@lumen.io','Lawyer'],['EP','Elena Petrova','elena.petrova@lumen.io','Lawyer'],['TF','Tom Fisher','tom.fisher@lumen.io','Approver'],['RV','Rahul Verma','rahul.verma@lumen.io','Member'],['MI','Meera Iyer','meera.iyer@lumen.io','Member']],
   req:[['NDA','4 questions. Goes out without a lawyer when nothing is changed.',['Who is the other company?','What is it for?','Will they share private information with us too?','When do you need it signed?']],
        ['Customer contract','6 questions. A lawyer drafts it.',['Who is the customer?','What are they buying?','How much is it worth each year?','When should it start?','Any special terms they asked for?','Who is the contact at the customer?']],
        ['Reseller agreement','5 questions. A lawyer drafts it.',['Who is the partner?','Which countries can they sell in?','What discount have you agreed?','Any marketing money?','When should it start?']],
@@ -894,7 +894,7 @@ const D0 = {
   sec:{sso:0, two:1, out:'After 8 hours', where:'India (Mumbai)', keep:'1 year'},
 };
 let D = JSON.parse(JSON.stringify(D0));
-const ST = { me:'PS', open:true, page:'general', ov:null, menu:false, view:'home', panel:null, pd:{}, toast:'', dirty:false };
+const ST = { me:'RB', open:true, page:'general', ov:null, menu:false, view:'home', panel:null, pd:{}, toast:'', dirty:false };
 const isAdmin = () => PEOPLE[ST.me][3]==='Admin';
 const esc = s => String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/"/g,'&quot;');
 
@@ -944,7 +944,7 @@ function flowChart(t, f, rs){
 }
 /* ---------- pages ---------- */
 const PG = {};
-PG.general = () => { const m = D.me, o = D.org, me = ST.me==='PS', adm = isAdmin(), p = PEOPLE[ST.me];
+PG.general = () => { const m = D.me, o = D.org, me = ST.me==='RB', adm = isAdmin(), p = PEOPLE[ST.me];
   return `<div class="ct">${head('General','Your details, and your company\'s.')}
   ${F('Full name', IN('me.name', me?m.name:p[0]))}
   ${F('What should Clavia call you?', IN('me.call', me?m.call:p[0].split(' ')[0]), 'Used in chats and emails from Clavia.')}
@@ -1084,13 +1084,13 @@ function overlay(){ const o = ST.ov; if(!o) return ''; const k = o.k, i = o.i, d
     if(o.step===0) return dlg('Connect '+a[2],'', `<div class="row" style="gap:12px;margin-bottom:12px">${logo(a[0],a[1])}<div>Clavia will send contracts through your ${a[2]} account and save the signed copy back in Repository.</div></div>
       <div class="dim sm13">You'll sign in to ${a[2]} and allow Clavia. You need to be an admin of your company's ${a[2]} account.</div>`,
       `<span class="sp"></span>${cancel}${B('Continue to '+a[2],'cnext','dk')}`);
-    if(o.step===1) return dlg('Connect '+a[2],'', `<div class="ext"><div class="bar" style="background:${a[1]}">${a[2]}</div><div class="bd"><div>Signed in as priya.shah@lumen.io</div><div style="margin-top:10px;font-weight:500">Clavia would like to:</div><ul><li>Send documents for signing</li><li>See who has signed</li><li>Download signed documents</li></ul><div class="row" style="margin-top:14px"><span class="sp"></span>${B('Cancel','close','sm')}${B('Allow','cnext','sm dk')}</div></div></div>`,
+    if(o.step===1) return dlg('Connect '+a[2],'', `<div class="ext"><div class="bar" style="background:${a[1]}">${a[2]}</div><div class="bd"><div>Signed in as roger.bennett@lumen.io</div><div style="margin-top:10px;font-weight:500">Clavia would like to:</div><ul><li>Send documents for signing</li><li>See who has signed</li><li>Download signed documents</li></ul><div class="row" style="margin-top:14px"><span class="sp"></span>${B('Cancel','close','sm')}${B('Allow','cnext','sm dk')}</div></div></div>`,
       `<span class="dim sm13">This window is ${a[2]}'s own page.</span>`);
     return dlg(a[2]+' is connected','', `${F('Use '+a[2]+' for', SEL('c.use', ['All contracts','Customer contracts and reseller agreements','Contracts over £250k a year'], d.use))}
       ${F('Send from', SEL('c.from', ['legal@lumen.io, so replies come to one place','Each person\'s own '+a[2]+' account'], d.from))}
       <div class="dim sm13">Everything else keeps using Clavia e-sign.</div>`,
       `<span class="sp"></span>${B('Done','cdone','dk')}`); }
-  if(k==='app'){ const a = D.apps[i]; return dlg(a[2], 'Connected as priya.shah@lumen.io', `${row(M('Used for'), V(cap(a[5].replace('Used for ',''))))}${row(M('Contracts signed this month'), V('14'))}`, `${L('Disconnect','disc:'+i,1)}<span class="sp"></span>${B('Done','close','dk')}`); }
+  if(k==='app'){ const a = D.apps[i]; return dlg(a[2], 'Connected as roger.bennett@lumen.io', `${row(M('Used for'), V(cap(a[5].replace('Used for ',''))))}${row(M('Contracts signed this month'), V('14'))}`, `${L('Disconnect','disc:'+i,1)}<span class="sp"></span>${B('Done','close','dk')}`); }
   if(k==='signer'){ const s = i!==undefined?D.signers[i]:['','']; return dlg(i!==undefined?'Edit signer':'Add a signer','Clavia only lets these people sign for Lumen.', `${F('Which contracts', IN('s0', s[0], 'e.g. Contracts over £1m a year'))}${F('Who can sign', IN('s1', s[1], 'e.g. Grace Coleman'))}`, `<span class="sp"></span>${cancel}${B('Save','toast:Saved','dk')}`); }
   if(k==='req'){ const r = D.req[i]; return dlg(r[0], r[1], `<div class="dim" style="margin-bottom:6px">Questions people answer</div>${r[2].map((q,j)=>row(M((j+1)+'. '+q), L('Edit','noop'))).join('')}<div style="margin-top:10px">${L('Add a question','toast:Question added')}</div>`, `<span class="sp"></span>${B('Done','close','dk')}`); }
   if(k==='invite') return dlg('Invite people','', `${F('Email addresses', IN('inv','zara.khan@lumen.io, leo.park@lumen.io'), 'Separate with commas.')}${F('Role', SEL('invrole', ['Member','Approver','Lawyer','Admin'], 'Member'))}`, `<span class="sp"></span>${cancel}${B('Send invites','toast:2 invites sent','dk')}`);
@@ -1098,7 +1098,7 @@ function overlay(){ const o = ST.ov; if(!o) return ''; const k = o.k, i = o.i, d
   if(k==='browse2') return dlg('Browse apps','', CMORE.map((a,j)=>row(`${appIcon(a.g,a.c)}${M(a.n,a.d)}`, `<button class="btn sm wbtn" data-a="cadd:${j}">${ICO_LINK}Connect</button>`)).join(''), `<span class="sp"></span>${B('Done','close','dk')}`, 500);
   if(k==='browse') return dlg('Browse apps','', [['O','#0078d4','Outlook'],['T','#5059c9','Microsoft Teams'],['H','#ff7a59','HubSpot'],['N','#000','Notion']].map(x=>row(`${logo(x[0],x[1])}${M(x[2])}`, B('Connect','toast:'+x[2]+' connected','sm'))).join(''), `<span class="sp"></span>${B('Done','close','dk')}`);
   if(k==='sso') return dlg('Set up company login','Everyone signs in with their Lumen work account.', F('Your login provider', SEL('ssop', ['Google Workspace','Microsoft','Okta'], 'Google Workspace')), `<span class="sp"></span>${cancel}${B('Continue','ssoyes','dk')}`);
-  if(k==='activity') return dlg('Activity','', [['Grace Coleman','Said OK to a 25% discount for Novatek','Today 11:40'],['Priya Shah','Turned off the rule for long NDAs','Today 10:02'],['Ana Mehta','Sent the Northwind NDA for signing','Yesterday'],['Tom Fisher','Signed in from a new laptop','20 Oct']].map(x=>row(M(x[1], x[0]), V(x[2]))).join(''), `<span class="sp"></span>${B('Done','close','dk')}`, 520);
+  if(k==='activity') return dlg('Activity','', [['Grace Coleman','Said OK to a 25% discount for Novatek','Today 11:40'],['Roger Bennett','Turned off the rule for long NDAs','Today 10:02'],['Ana Mehta','Sent the Northwind NDA for signing','Yesterday'],['Tom Fisher','Signed in from a new laptop','20 Oct']].map(x=>row(M(x[1], x[0]), V(x[2]))).join(''), `<span class="sp"></span>${B('Done','close','dk')}`, 520);
   if(k==='forget') return dlg('Forget this?', esc(D.mem.items[i][0]), '', `<span class="sp"></span>${cancel}${B('Forget','forgetyes:'+i,'dk')}`, 400);
   if(k==='logout') return dlg('Log out of Clavia?','', '', `<span class="sp"></span>${cancel}${B('Log out','logoutyes','dk')}`, 400);
   return '';
@@ -1816,7 +1816,7 @@ PG.channels = () => `<div class="ct cons">${head('Channels','Where people can as
   <h3 class="s">When Clavia can't tell what kind of request it is</h3>
   ${row(M('Clavia will'), inSel('ch.unk', ['Ask the person what kind of request it is','Send it to Unassigned for a lawyer to sort'], CH_UNK))}</div>`;
 function chDlg(){ const d = ST.ind.d;
-  return dlg(esc(d.n), d.built?'Built into Clavia.':'Connected as priya.shah@lumen.io', `
+  return dlg(esc(d.n), d.built?'Built into Clavia.':'Connected as roger.bennett@lumen.io', `
     <div class="lab">Where people ask</div>${inIn('ch.where', d.where, '')}
     <div class="lab" style="margin-top:14px">Who can ask here</div>${inSel('ch.who', ['Anyone at Lumen','Only some teams','Only people in Legal'], d.who, 'in')}
     <div class="row" style="margin-top:16px;gap:12px;align-items:flex-start">${T(d.ack,'in:chack','Reply straight away')}<div><div style="font-weight:500">Reply straight away</div><div class="dim" style="font-size:11.5px">Clavia answers within a minute to say it's on it, and asks for anything missing.</div></div></div>`,
@@ -2814,7 +2814,7 @@ function cxPage(i){ const a = CONS[i], c = a.cfg, open = ST.cxMenu, q = (ST.cxQ|
   const box = on => `<span class="cxbox${on?' on':''}">${on?ICO_OK:''}</span>`;
   const ck = (k, t, d) => `<button class="cxck" data-a="cx:t:${k}" role="checkbox" aria-checked="${c[k]?'true':'false'}">${box(c[k])}<span><b>${t}</b><span class="d">${d}</span></span></button>`;
   return `<div class="ct"><div class="subhd"><button class="lnk" data-a="cx:back">‹ Connectors</button></div>
-  <div class="cxhead">${cxImg(a.n)}<div style="flex:1;min-width:0"><h2 class="t" style="margin:0">${esc(a.n)}</h2><div class="cxd">Connected as priya.shah@lumen.io</div></div><button class="cxb" data-a="cx:off:${i}">Disconnect</button></div>
+  <div class="cxhead">${cxImg(a.n)}<div style="flex:1;min-width:0"><h2 class="t" style="margin:0">${esc(a.n)}</h2><div class="cxd">Connected as roger.bennett@lumen.io</div></div><button class="cxb" data-a="cx:off:${i}">Disconnect</button></div>
   <div class="cxsec"><div class="cxst">${c.label}</div><div class="cxsd">${c.say}</div>
     <div class="cxchips">${c.pick.map((x,j)=>`<span class="cxchip">${esc(x)}<button data-a="cx:rm:${j}" aria-label="Remove ${esc(x)}">✕</button></span>`).join('')}
       <span class="cxadd"><button data-a="cx:menu" aria-haspopup="listbox" aria-expanded="${open?'true':'false'}">+ ${c.pick.length?'Add more':'Pick channels'}</button>
@@ -2856,6 +2856,18 @@ fdDlg = function(){ const h = _fdUpd(), o = ST.fd; if(!o || o.isNew) return h;
 render();
 </script>
 <style>
+#sbody .fdu .tch.sum{background:#f4f3f0;color:#2b2a28;cursor:default}
+</style>
+<script>
+/* v35: Fields says where each field is used in a few words: one type by name, "All contract types", or "3 types" */
+const _fdRow35 = fdRow;
+fdRow = (k, i) => { const h = _fdRow35(k, i), us = fUsers(k); if(us.length < 2) return h;
+  const cts = TY.filter(t=>t.c), allC = cts.every(t=>us.includes(t)), extra = us.filter(t=>!t.c).length;
+  const say = allC ? 'All contract types' + (extra ? ` + ${extra} more` : '') : `${us.length} types`;
+  return h.replace(/<span class="fdu">[\s\S]*?<\/span><span class="go">/, () => `<span class="fdu"><span class="tch sum" title="${esc(us.map(t=>t.n).join(', '))}">${say}</span></span><span class="go">`); };
+render();
+</script>
+<style>
 /* inside the Clavia app: only the Settings window, over the real app */
 html,body{background:transparent!important}
 .wrap,.framebox,.frame{background:transparent!important;box-shadow:none!important}
@@ -2869,6 +2881,10 @@ const _hostRender = render;
 render = function(){ if(!ST.open){ ST.open = true; ST.ov = null; parent.postMessage({ clavia: 'settings-close' }, '*'); } return _hostRender(); };
 addEventListener('message', e => { const m = e.data || {}; if(m.clavia !== 'settings-page') return;
   ST.page = PG[m.page] ? m.page : ST.page; ST.ov = null; ST.ind = null; ST.fd = null; ST.reset = true; render(); });
+/* the Signing rules are what the app's Send for signature window follows for our side */
+try { const kept = JSON.parse(localStorage.getItem('clavia.signRules') || 'null'); if (kept && kept.list) { RS.sg.list = kept.list; RS.sg.fall = kept.fall; } } catch (e) {}
+const _hostRender2 = render;
+render = function(){ const out = _hostRender2(); try { localStorage.setItem('clavia.signRules', JSON.stringify({ list: RS.sg.list, fall: RS.sg.fall })); } catch (e) {} return out; };
 if (window.name && PG[window.name]) ST.page = window.name;
 render();
 </script>

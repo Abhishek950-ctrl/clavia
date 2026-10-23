@@ -3794,3 +3794,13 @@ html.vt-cmts::view-transition-new(rqp-doc), html.vt-cmts::view-transition-new(rq
 .rqp-left .br-top { flex-wrap: wrap; row-gap: 8px; }
 .rqp-left .br-top-r { flex: none; margin-left: auto; }
 .rqp-crumbs { flex: none; }
+
+/* Send for signature: our company's signers come from Settings › Signing and are shown, not edited */
+.mx-ss-rule { display: inline-flex; align-items: center; gap: 5px; border: 0; background: #F2F0EC; border-radius: 999px; padding: 3px 9px; font: inherit; font-size: 11.5px; color: var(--text-soft); cursor: pointer; }
+.mx-ss-rule:hover { background: #EAE7E1; color: var(--text); }
+.mx-ss-rule span { display: grid; }
+.mx-ss-fixed { background: #FAF9F7; }
+.mx-ss-fixed .mx-ss-sg-b { gap: 10px; }
+.mx-ss-then { flex: none; font-size: 11.5px; color: var(--text-faint); }
+.mx-ss-auto { margin: 0; padding: 12px 14px; font-size: 13px; color: var(--text-soft); }
+.mx-ss-svc { margin: 6px 2px 0; font-size: 11.5px; color: var(--text-faint); }

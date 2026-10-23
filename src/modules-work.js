@@ -3654,10 +3654,13 @@ function intakePage(r, opts = {}) {
     const lastEnv = mxEnvelopes(r)[mxEnvelopes(r).length - 1];
     const lastThem = lastEnv?.signers.find(x => x.side === 'them');
     const contact = mxPeople(r).find(p => p.side === 'counterparty');
-    const levels = cfg.levels.map(lv => ({ side: lv.side, rule: lv.rule }));
+    /* the other side's signers are picked here; ours follow Settings › Signing, shown but not changed */
+    const themLv = cfg.levels.filter(lv => lv.side === 'them');
+    const levels = themLv.map(lv => ({ side: lv.side, rule: lv.rule }));
+    const plan = () => stSignPlan(r, rows.map(docOf).filter(Boolean));
     const person = (name) => { const p = [...MX_LEGAL, ...MX_STAFF].find(x => x.name === name);
       return { name, title: (p?.role || '').split(' · ')[0], email: name === USER.name ? USER.email : mxEmail(name) }; };
-    const signers = cfg.levels.flatMap((lv, i) => lv.who.map(w => ({ level: i, them: lv.side === 'them',
+    const signers = themLv.flatMap((lv, i) => lv.who.map(w => ({ level: i, them: lv.side === 'them',
       ...(w === '@contact' ? { name: lastThem?.who || contact?.name || '', title: lastThem?.title || (contact?.role || '').split(' · ')[0], email: lastThem?.email || contact?.email || '' }
         : w === '@other' ? { name: '', title: '', email: '' } : person(w)) })));
     let editing = signers.find(s => !s.name || !s.email) || null;
@@ -3718,6 +3721,21 @@ function intakePage(r, opts = {}) {
           h('button', { class: 'mx-ss-lv-add', type: 'button', disabled: !!editing, onclick: () => { const s = { level: i, them: lv.side === 'them', name: '', title: '', email: '' }; signers.push(s); editing = s; paint(); } }, '+ Signer')),
         h('div', { class: 'mx-ss-box' }, ...xs.map(signerRow)));
     };
+    /* our company's signers, as the rule that fits says: who, in what order, and with which service */
+    const usBox = (p, n0) => h('div', { class: 'mx-ss-lv mx-ss-us' },
+      h('div', { class: 'mx-ss-lv-h' }, order === 'sequential' ? h('span', { class: 'mx-ss-lv-n' }, String(n0 + 1)) : null,
+        h('b', {}, co), h('span', { class: 'pb-grow' }),
+        h('button', { class: 'mx-ss-rule', type: 'button', 'data-tip': 'See it in Settings › Signing', onclick: () => openSettingsV2('sign') },
+          h('span', { html: ICON('<rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/>', 12) }), p.rule.n === 'Everything else' ? 'Signing settings' : `Signing rule: ${p.rule.n}`)),
+      h('div', { class: 'mx-ss-box mx-ss-fixed' }, ...(p.auto
+        ? [h('p', { class: 'mx-ss-auto' }, `${co} signs by itself. Only ${r.counterparty || 'the other side'} needs to sign.`)]
+        : p.groups.flatMap((g, gi) => g.who.map((w, wi) => { const x = person(w);
+            return h('div', { class: 'mx-ss-sg' }, h('div', { class: 'mx-ss-sg-b' },
+              gi || wi ? h('span', { class: 'mx-ss-then' }, wi ? (g.rule === 'any' ? 'or' : 'and') : 'then') : null,
+              mxFace(x.name, 'pb-av mx-ss-sg-av'),
+              h('div', { class: 'mx-ss-sg-who' }, h('b', {}, x.name), h('span', {}, [x.title, x.email].filter(Boolean).join(' · ')))));
+          })))),
+      h('p', { class: 'mx-ss-svc' }, `Sent with ${p.svc}. To change who signs for ${co}, change the rule in Settings.`));
     const foot = h('footer', { class: 'mx-rqf-foot mx-ss-foot' });
     const paintFoot = () => {
       const n = rows.length, blocked = rows.find(x => x.k < 0);
@@ -3740,7 +3758,7 @@ function intakePage(r, opts = {}) {
           h('div', { class: 'mx-ss-sec' },
             h('div', { class: 'mx-ss-l' }, h('span', {}, 'Signers'),
               null),
-            h('div', { class: 'mx-ss-lvs' + (order === 'sequential' ? ' is-seq' : '') }, ...levels.map(levelBox)))),
+            h('div', { class: 'mx-ss-lvs' + (order === 'sequential' ? ' is-seq' : '') }, ...levels.map(levelBox), usBox(plan(), levels.length)))),
         foot);
       paintFoot();
       dlg.querySelector('.mx-ss-sg.is-edit input')?.focus();
@@ -3750,7 +3768,10 @@ function intakePage(r, opts = {}) {
       const go = () => {
         const them = signers.find(s => s.them), p = them && mxPeople(r).find(q => q.side === 'counterparty' && q.name === them.name);
         if (p) { p.email = them.email; if (them.title) p.role = them.title; }
-        mxEnvSend(r, items, signers, { order, levels, provider: cfg.provider });
+        const pl = plan(), base = levels.length;
+        const ours = pl.groups.flatMap((g, gi) => g.who.map(w => ({ level: base + gi, them: false, ...person(w) })));
+        mxEnvSend(r, items, [...signers, ...ours], { order, levels: [...levels, ...pl.groups.map(g => ({ side: 'us', rule: g.rule }))],
+          provider: { 'Clavia e-sign': 'clavia', DocuSign: 'docusign', 'Adobe Acrobat Sign': 'adobe' }[pl.svc] || cfg.provider });
         paintSteps(); stageBtn._paint?.(); paintSig(); paintTabs();
         close(); paintDoc(); paintBody(); pbToast(items.length > 1 ? `${items.length} documents sent for signature` : 'Sent for signature');
       };
