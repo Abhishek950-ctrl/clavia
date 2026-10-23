@@ -6704,3 +6704,24 @@ body[data-bare] .br-pane { display: none; }
 .menu-item.is-on { background: var(--tint, #F4F2EE); font-weight: 500; }
 .menu-key + .menu-tick { margin-left: 8px; }
 .menu-tick.is-blank { visibility: hidden; }
+
+/* the account menu: rises from the foot of the rail, dark like the rail itself */
+.rail-user-chev { width: 14px; height: 14px; flex: none; display: grid; color: var(--rail-text); opacity: .8; }
+.rail-user-chev svg { width: 14px; height: 14px; }
+.app[data-rail="collapsed"] .rail-user-chev { display: none; }
+.menu.acct2 {
+  padding: 0; border-radius: 14px; overflow: hidden;
+  background: #1D3016; border: 1px solid rgba(227, 216, 194, 0.22);
+  box-shadow: 0 14px 34px rgba(0, 0, 0, .35); color: #F2F1EA;
+}
+.acct2-n { padding: 13px 18px 12px; font-size: 13px; color: rgba(242, 241, 234, .55); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.acct2-rule { height: 1px; background: rgba(227, 216, 194, 0.16); }
+.acct2-i {
+  display: flex; align-items: center; gap: 14px; width: 100%;
+  border: 0; background: none; color: inherit; font: inherit; font-size: 14px;
+  padding: 11px 18px; cursor: pointer; text-align: left;
+}
+.acct2-i:first-of-type { margin-top: 4px; }
+.acct2-i:last-child { margin-bottom: 4px; }
+.acct2-i:hover, .acct2-i:focus-visible { background: rgba(255, 255, 255, .06); outline: none; }
+.acct2-i svg { width: 18px; height: 18px; flex: none; }

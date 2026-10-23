@@ -2659,6 +2659,8 @@ render();
 
 <style>
 /* v32: when a field's definition changes, what happens to values already filled in */
+.dlg.r3d{max-height:none}.dlg.r3d .db{overflow:visible;padding-top:14px;padding-bottom:14px}
+.dlg.r3d .hbo{padding:10px 14px}.dlg.r3d .hbo .d{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .r3n{display:flex;align-items:baseline;gap:10px;background:#faf9f7;border:1px solid #ecebe7;border-radius:12px;padding:14px 16px}
 .r3n b{font:600 26px/1 var(--sans);color:#1c2a19;letter-spacing:-.01em}.r3n span{font-size:13px;color:#4a4745}
 .r3ms .pkb{height:36px;padding:0 12px;font-size:12.5px}.r3ms .pkn.noone{color:#8e8a86}
@@ -2708,7 +2710,7 @@ function retroDlg(){ const o = ST.retro, k = o.k, f = FL[k], n = r3Count(o);
     ${o.gone.length?`<div class="lab" style="margin-top:16px">Values you removed</div><div class="r3map">${o.gone.map(v=>{ const cur = o.map[v] || 'Leave it as it is';
       return `<div class="r3mr"><span>${esc(v)}</span><select class="in mini" data-r3="map.${esc(v)}">${['Leave it as it is'].concat((f.opts||[]).map(x=>'Change to '+x)).concat(['Clear it, a person fills it in']).map(x=>`<option${x===cur?' selected':''}>${esc(x)}</option>`).join('')}</select></div>`; }).join('')}</div>`:''}
     ${o.typeChanged && f.k!=='Text' && o.mode==='recheck'?`<div class="r3warn">Some values may not fit the new type, ${eg}. Those go to a person to fix.</div>`:''}`,
-    `<button class="lnk" data-a="r3:back" style="margin-right:auto">Back to the field</button><button class="btn dk" data-a="r3:save"${o.mode==='recheck'&&!o.st.length?' disabled':''}>Save and apply</button>`, 560); }
+    `<button class="lnk" data-a="r3:back" style="margin-right:auto">Back to the field</button><button class="btn dk" data-a="r3:save"${o.mode==='recheck'&&!o.st.length?' disabled':''}>Save and apply</button>`, 640).replace('class="dlg"', 'class="dlg r3d"'); }
 const _r3Ov = overlay;
 overlay = function(){ if(ST.retro) return retroDlg(); return _r3Ov(); };
 const _r3Dlg = fdDlg;
@@ -2749,42 +2751,41 @@ render();
 </script>
 <style>
 /* v33: connectors with the apps' own icons, Disconnect on hover, and settings for Slack and Teams */
-#sbody .cxl{margin:0 -14px}
-#sbody .cxr{display:flex;align-items:center;gap:16px;padding:12px 14px;border-radius:14px}
+#sbody .cxl{margin:0 -10px}
+#sbody .cxr{display:flex;align-items:center;gap:14px;padding:9px 10px;border-radius:10px}
 #sbody .cxr:hover,#sbody .cxr:focus-within{background:#f8f7f4}
 #sbody .cxr.cl{cursor:pointer}
-#sbody .cxi{width:26px;height:26px;flex:none;object-fit:contain}
+#sbody .cxi{width:22px;height:22px;flex:none;object-fit:contain}
 #sbody .cxm{flex:1;min-width:0}
-#sbody .cxn{font-size:14.5px!important;font-weight:500;color:#201f1e}
-#sbody .cxd{font-size:13px!important;color:#8e8a86;margin-top:1px}
-#sbody .cxb{border:1px solid #e6e4df;background:#fff;border-radius:8px;padding:6px 14px;font:400 13px var(--sans);color:#4a4745;cursor:pointer;white-space:nowrap}
+#sbody .cxn{font-size:12.5px!important;font-weight:500;color:#201f1e}
+#sbody .cxd{font-size:11.5px!important;color:#8e8a86;margin-top:1px}
+#sbody .cxb{border:1px solid #e6e4df;background:#fff;border-radius:7px;padding:4px 11px;font:400 12px var(--sans);color:#4a4745;cursor:pointer;white-space:nowrap}
 #sbody .cxb:hover{border-color:#cfccc5;color:#201f1e}
 #sbody .cxr .cxdis{visibility:hidden}
 #sbody .cxr:hover .cxdis,#sbody .cxr:focus-within .cxdis{visibility:visible}
-#sbody .cxok{width:36px;display:grid;place-items:center;color:#2f6b3d;flex:none}#sbody .cxok svg{width:20px;height:20px}
-#sbody .cxgo{color:#b3afa9;font-size:15px;margin-left:-6px;width:10px}
-#sbody .cxhead{display:flex;align-items:center;gap:14px;margin:4px 0 6px}
-#sbody .cxhead .cxi{width:34px;height:34px}
-#sbody .cxsec{border-top:1px solid #ecebe7;padding:20px 0 6px;margin-top:18px}
-#sbody .cxst{font-size:14px!important;font-weight:600;color:#201f1e}
-#sbody .cxsd{font-size:12.5px!important;color:#8e8a86;margin:3px 0 12px;line-height:1.5}
+#sbody .cxok{width:28px;display:grid;place-items:center;color:#2f6b3d;flex:none}#sbody .cxok svg{width:16px;height:16px}
+#sbody .cxhead{display:flex;align-items:center;gap:12px;margin:4px 0 4px}
+#sbody .cxhead .cxi{width:26px;height:26px}
+#sbody .cxsec{border-top:1px solid #ecebe7;padding:16px 0 4px;margin-top:16px}
+#sbody .cxst{font-size:12.5px!important;font-weight:600;color:#201f1e}
+#sbody .cxsd{font-size:11.5px!important;color:#8e8a86;margin:2px 0 10px;line-height:1.5}
 #sbody .cxchips{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
-#sbody .cxchip{display:inline-flex;align-items:center;gap:6px;background:#f4f3f0;border-radius:999px;padding:4px 6px 4px 12px;font-size:13px;color:#201f1e}
-#sbody .cxchip button{border:0;background:none;cursor:pointer;color:#8e8a86;font-size:11px;width:18px;height:18px;border-radius:50%;display:grid;place-items:center;padding:0}
+#sbody .cxchip{display:inline-flex;align-items:center;gap:5px;background:#f4f3f0;border-radius:999px;padding:3px 5px 3px 10px;font-size:12px;color:#201f1e}
+#sbody .cxchip button{border:0;background:none;cursor:pointer;color:#8e8a86;font-size:10px;width:16px;height:16px;border-radius:50%;display:grid;place-items:center;padding:0}
 #sbody .cxchip button:hover{background:#e6e4df;color:#2b2a28}
 #sbody .cxadd{position:relative}
-#sbody .cxadd > button{border:1px dashed #d8d5ce;background:#fff;border-radius:999px;padding:4px 12px;font:inherit;font-size:13px;color:#4a4745;cursor:pointer}
+#sbody .cxadd > button{border:1px dashed #d8d5ce;background:#fff;border-radius:999px;padding:3px 10px;font:inherit;font-size:12px;color:#4a4745;cursor:pointer}
 #sbody .cxadd > button:hover{border-color:#a9a59d}
-#sbody .cxmenu{position:absolute;left:0;top:calc(100% + 6px);width:280px;background:#fff;border:1px solid #ecebe7;border-radius:12px;box-shadow:0 12px 30px rgba(0,0,0,.12);padding:6px;z-index:6;max-height:300px;overflow:auto}
-#sbody .cxmenu input{width:100%;border:1px solid #ecebe7;border-radius:8px;padding:7px 10px;font:inherit;font-size:13px;outline:none;margin-bottom:4px}
-#sbody .cxmi{display:flex;align-items:center;gap:10px;width:100%;border:0;background:none;padding:7px 9px;border-radius:7px;cursor:pointer;font:inherit;font-size:13px;text-align:left;color:#201f1e}
+#sbody .cxmenu{position:absolute;left:0;top:calc(100% + 6px);width:250px;background:#fff;border:1px solid #ecebe7;border-radius:11px;box-shadow:0 12px 30px rgba(0,0,0,.12);padding:5px;z-index:6;max-height:280px;overflow:auto}
+#sbody .cxmenu input{width:100%;border:1px solid #ecebe7;border-radius:7px;padding:6px 9px;font:inherit;font-size:12px;outline:none;margin-bottom:4px}
+#sbody .cxmi{display:flex;align-items:center;gap:9px;width:100%;border:0;background:none;padding:6px 8px;border-radius:7px;cursor:pointer;font:inherit;font-size:12.5px;text-align:left;color:#201f1e}
 #sbody .cxmi:hover{background:#f4f3f0}
-#sbody .cxbox{width:18px;height:18px;border-radius:5px;border:1.5px solid #cfccc5;background:#fff;display:grid;place-items:center;color:#fff;flex:none}
-#sbody .cxbox.on{background:#1c2a19;border-color:#1c2a19}#sbody .cxbox svg{width:11px;height:11px}
-#sbody .cxck{display:flex;gap:14px;align-items:flex-start;width:100%;border:0;background:none;padding:10px 0;cursor:pointer;text-align:left;font:inherit}
-#sbody .cxck .cxbox{width:22px;height:22px;border-radius:6px;margin-top:1px}#sbody .cxck .cxbox svg{width:13px;height:13px}
-#sbody .cxck b{display:block;font-size:14.5px;font-weight:500;color:#201f1e}
-#sbody .cxck span.d{display:block;font-size:13px;color:#8e8a86;line-height:1.55;margin-top:4px}
+#sbody .cxbox{width:16px;height:16px;border-radius:4px;border:1.5px solid #cfccc5;background:#fff;display:grid;place-items:center;color:#fff;flex:none}
+#sbody .cxbox.on{background:#1c2a19;border-color:#1c2a19}#sbody .cxbox svg{width:10px;height:10px}
+#sbody .cxck{display:flex;gap:12px;align-items:flex-start;width:100%;border:0;background:none;padding:8px 0;cursor:pointer;text-align:left;font:inherit}
+#sbody .cxck .cxbox{width:18px;height:18px;border-radius:5px;margin-top:0}#sbody .cxck .cxbox svg{width:11px;height:11px}
+#sbody .cxck b{display:block;font-size:12.5px;font-weight:500;color:#201f1e}
+#sbody .cxck span.d{display:block;font-size:11.5px;color:#8e8a86;line-height:1.5;margin-top:2px}
 </style>
 <script>
 /* ===== v33: Connectors — the apps' own icons, a check when connected, Disconnect on hover,
@@ -2845,6 +2846,13 @@ document.addEventListener('click', e => { const t = e.target;
   if(ST.retro && ST.retro.stOpen && !(t.closest && t.closest('.r3ms'))){ ST.retro.stOpen = 0; render(); } }, true);
 document.addEventListener('keydown', e => { if(e.key==='Escape' && ST.cxMenu){ e.stopImmediatePropagation(); ST.cxMenu = 0; render(); }
   if((e.key==='Enter'||e.key===' ') && e.target.matches && e.target.matches('.cxr.cl')){ e.preventDefault(); e.target.click(); } }, true);
+render();
+</script>
+<script>
+/* v34: an existing field's dialog saves with Update */
+const _fdUpd = fdDlg;
+fdDlg = function(){ const h = _fdUpd(), o = ST.fd; if(!o || o.isNew) return h;
+  return h.replace(/(<button class="btn dk" data-a="close">)Done(<\/button>)(?![\s\S]*data-a="close">Done)/, '$1Update$2'); };
 render();
 </script>
 <style>

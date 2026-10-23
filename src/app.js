@@ -1192,6 +1192,7 @@ function mountNav() {
     h('span', { class: 'rail-user-text' },
       h('span', { class: 'rail-user-name' }, USER.name),
     ),
+    h('span', { class: 'rail-user-chev', 'aria-hidden': 'true', html: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m7 14 5-5 5 5"/></svg>' }),
   );
   /* it had the pointer and the hover ground of something that opens, and
      opened nothing */
@@ -1747,56 +1748,29 @@ function paintConnectors(el, anchor) {
    The only thing at the foot of the rail, so it answers the two questions
    anybody has of it: which account this is, and how much of the month is
    left. Everything else is a row. */
+const COG_GLYPH = '<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/>';
 function accountCard(anchor) {
+  if (openMenu?.classList.contains('acct2')) { closeMenu(); return; }
   closeMenu();
-  const u = meUsage();
-  const pct = Math.min(u.spent / u.limit, 1);
-  const out = u.spent >= u.limit;
-
   const row = (label, icon, run) => h('button', {
-    class: 'menu-item', type: 'button', role: 'menuitem',
+    class: 'acct2-i', type: 'button', role: 'menuitem',
     onclick: () => { closeMenu(); run(); },
-    html: MI(GLYPHS[icon]),
-  }, h('span', { class: 'menu-label' }, label));
-
-  const el = h('div', { class: 'menu acct' },
-    h('div', { class: 'acct-top' },
-      faceEl(USER.name, 'acct-av'),
-      h('div', { class: 'acct-m' },
-        h('span', { class: 'acct-n' }, USER.name),
-        h('span', { class: 'acct-e' }, USER.email))),
-    h('div', { class: 'acct-use' },
-      h('div', { class: 'acct-use-l' },
-        h('span', {}, 'Usage this month'),
-        h('span', { class: 'acct-use-v', 'data-out': String(out) },
-          `${usd(u.spent)} of ${usd0(u.limit)}`)),
-      h('div', { class: 'acct-bar' },
-        h('span', { class: 'acct-bar-on', 'data-out': String(out),
-                    style: `width:${Math.max(pct * 100, 2)}%` })),
-      h('p', { class: 'acct-use-s' }, `Resets on ${u.on}`)),
-    h('div', { class: 'menu-rule' }),
-    row('Settings', 'gear', () => openSettingsV2('general')),
-    /* the list opens in the same card rather than a toast saying it will
-       exist one day: which systems the assistant can read is a question
-       people actually ask of their account */
-    h('button', {
-      class: 'menu-item', type: 'button', role: 'menuitem',
-      html: MI(GLYPHS.files),
-      onclick: (e) => { e.stopPropagation(); paintConnectors(el, anchor); },
-    }, h('span', { class: 'menu-label' }, 'Connectors'),
-       h('span', { class: 'acct-cn-n' }, `${ACCT_CX.filter(c => CONNECTED.has(c.id)).length} of ${ACCT_CX.length}`),
-       h('span', { class: 'menu-more', 'aria-hidden': 'true' })),
-    h('div', { class: 'menu-rule' }),
-    row('Sign out', 'out', () => toast('Signed out.')));
-
+    html: MI(icon === 'cog' ? COG_GLYPH : GLYPHS[icon]),
+  }, h('span', {}, label));
+  /* the account menu, as it is in the product: who you are, Settings, Log Out */
+  const el = h('div', { class: 'menu acct2', role: 'menu', 'aria-label': USER.name },
+    h('div', { class: 'acct2-n' }, USER.name),
+    h('div', { class: 'acct2-rule' }),
+    row('Settings', 'cog', () => openSettingsV2('general')),
+    row('Log Out', 'out', () => toast('Logged out.')));
   document.body.append(el);
   openMenu = el;
+  anchor.setAttribute('aria-expanded', 'true');
   const r = anchor.getBoundingClientRect();
-  el.style.left = (r.right + 8) + 'px';
-  /* it sits on the foot of the rail, so it rises from it — clamped so it
-     never runs off the bottom of the window it is rising against */
-  const foot = Math.min(r.bottom, innerHeight - 12);
-  el.style.top = Math.max(12, foot - el.offsetHeight) + 'px';
+  /* it rises from the foot of the rail, as wide as the button it opens from */
+  el.style.left = (r.left + 8) + 'px';
+  el.style.width = Math.max(220, r.width - 16) + 'px';
+  el.style.top = Math.max(12, r.top - 6 - el.offsetHeight) + 'px';
   el.classList.add('opening');
   el.addEventListener('click', (e) => e.stopPropagation());
 }
@@ -2132,6 +2106,7 @@ function closeMenu() {
      take it with it */
   document.querySelectorAll('.menu-sub').forEach(n => n.remove());
   openMenu?.remove(); openMenu = null;
+  document.getElementById('railUser')?.setAttribute('aria-expanded', 'false');
 }
 document.addEventListener('click', closeMenu);
 document.addEventListener('keydown', e => { if (e.key === 'Escape') closeMenu(); });
