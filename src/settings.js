@@ -30,7 +30,9 @@ const stConn = (id) => { const all = stConns(); return all[id] ||= { st: 'off', 
 const stOf = (id) => ST_CONNECTORS.find(c => c.id === id);
 const stLink = (sec) => location.origin + location.pathname + '#settings/' + sec;
 const stDay = (iso) => new Date(iso).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: new Date(iso).getFullYear() === new Date().getFullYear() ? undefined : 'numeric' });
-const stGo = (sec) => { MX.settings.open = sec; go('settings'); };
+/* pages the Settings window covers open there; the rest (Horizon's) keep this page */
+const stGo = (sec) => { const v2 = typeof ST_V2_PAGE !== 'undefined' && ST_V2_PAGE[sec.split('/')[0]];
+  if (v2) return openSettingsV2(v2); MX.settings.open = sec; go('settings'); };
 
 /* the vendor's own mark from the brand folder; where we don't have it yet, a quiet tile with the kind of thing it is */
 function stMark(c, cls = '') {

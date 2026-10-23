@@ -1775,7 +1775,7 @@ function accountCard(anchor) {
                     style: `width:${Math.max(pct * 100, 2)}%` })),
       h('p', { class: 'acct-use-s' }, `Resets on ${u.on}`)),
     h('div', { class: 'menu-rule' }),
-    row('Settings', 'gear', () => { MX.settings.open = null; go('settings'); }),
+    row('Settings', 'gear', () => openSettingsV2('general')),
     /* the list opens in the same card rather than a toast saying it will
        exist one day: which systems the assistant can read is a question
        people actually ask of their account */
