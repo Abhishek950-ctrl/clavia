@@ -2867,6 +2867,29 @@ fdRow = (k, i) => { const h = _fdRow35(k, i), us = fUsers(k); if(us.length < 2) 
   return h.replace(/<span class="fdu">[\s\S]*?<\/span><span class="go">/, () => `<span class="fdu"><span class="tch sum" title="${esc(us.map(t=>t.n).join(', '))}">${say}</span></span><span class="go">`); };
 render();
 </script>
+<script>
+/* ===== v36: one list of conditions for every rule =====
+   Routing, Approvals, Signing and Vault all pick "When" from the same list: every field on the
+   Fields page, then a few facts about the request that are not fields. A new field shows up in
+   every rule; how it can be compared follows its type. */
+var COND_BUILTIN = ['Type','Intake channel','Paper','Counterparty country','Stage of request','Stage of document','Version changes'];
+function rfSync(){ FLK().forEach(k => { const f = FL[k];
+  RF[k] = f.k==='Date' ? [['is before','is after'], null]
+    : (f.k==='Amount' || f.k==='Number') ? [['is more than','is less than'], null]
+    : f.k==='Pick from a list' ? [['is','is not'], f.opts && f.opts.length ? f.opts : null]
+    : f.k==='Yes or no' ? [['is'], ['Yes','No']]
+    : f.k==='File' ? [['is'], ['Attached','Missing']]
+    : [['is','is not','includes'], null]; }); }
+/* Jurisdiction was its own condition; it is the Governing law field */
+[RR, RS.ap.list, RS.sg.list, (RS.vt||{}).list || []].forEach(list => list.forEach(r => { r.cs = r.cs.map(c => c[0]!=='Jurisdiction' ? c
+  : c[1]==='does not include' ? ['Governing law','is not', String(c[2]).split(',')[0].trim()] : ['Governing law','is', String(c[2]).split(',')[0].trim()]); }));
+var condPick = (j, cur) => { const o = k => `<option value="${esc(k)}"${k===cur?' selected':''}>${esc(k)}</option>`;
+  return `<select class="in" data-in="r.c.${j}.0"><optgroup label="Fields">${FLK().map(o).join('')}</optgroup><optgroup label="About the request">${COND_BUILTIN.filter(k=>!FL[k]).map(o).join('')}</optgroup></select>`; };
+condEd2 = (c, j) => { rfSync(); const R = RF[c[0]] || [['is'], null], vals = rfVals(c[0]);
+  return `<div class="ced">${condPick(j, c[0])}${inSel('r.c.'+j+'.1', R[0], c[1], 'in')}${vals ? inSel('r.c.'+j+'.2', vals, c[2], 'in') : inIn('r.c.'+j+'.2', c[2], (FL[c[0]]||{}).k==='Date' ? 'e.g. 1 Jan 2027' : (FL[c[0]]||{}).k==='Amount' ? 'e.g. £1,000,000' : 'Separate with commas')}<button class="x sgcx" data-a="in:crm:${j}" aria-label="Remove condition">✕</button></div>`; };
+rfSync();
+render();
+</script>
 <style>
 /* inside the Clavia app: only the Settings window, over the real app */
 html,body{background:transparent!important}

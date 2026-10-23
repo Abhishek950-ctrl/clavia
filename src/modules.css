@@ -3804,3 +3804,11 @@ html.vt-cmts::view-transition-new(rqp-doc), html.vt-cmts::view-transition-new(rq
 .mx-ss-then { flex: none; font-size: 11.5px; color: var(--text-faint); }
 .mx-ss-auto { margin: 0; padding: 12px 14px; font-size: 13px; color: var(--text-soft); }
 .mx-ss-svc { margin: 6px 2px 0; font-size: 11.5px; color: var(--text-faint); }
+.mx-ss-envs { display: flex; flex-direction: column; gap: 10px; }
+.mx-ss-envs-say { margin: 2px 2px 0; font-size: 12.5px; color: var(--text-soft); line-height: 1.5; }
+.mx-ss-env { border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px 12px; }
+.mx-ss-env-h { display: flex; align-items: baseline; gap: 8px; margin-bottom: 8px; font-size: 13px; min-width: 0; }
+.mx-ss-env-h b { font-weight: 600; flex: none; }
+.mx-ss-env-h span:not(.pb-grow):not(.mx-ss-env-svc) { color: var(--text-soft); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.mx-ss-env-svc { flex: none; font-size: 11.5px; color: var(--text-faint); }
+.mx-ss-env .mx-ss-us { margin: 0; }
