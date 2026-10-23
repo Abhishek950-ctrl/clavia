@@ -2659,6 +2659,10 @@ render();
 
 <style>
 /* v32: when a field's definition changes, what happens to values already filled in */
+.r3n{display:flex;align-items:baseline;gap:10px;background:#faf9f7;border:1px solid #ecebe7;border-radius:12px;padding:14px 16px}
+.r3n b{font:600 26px/1 var(--sans);color:#1c2a19;letter-spacing:-.01em}.r3n span{font-size:13px;color:#4a4745}
+.r3ms .pkb{height:36px;padding:0 12px;font-size:12.5px}.r3ms .pkn.noone{color:#8e8a86}
+.r3x{width:18px;height:18px;border-radius:5px;border:1.5px solid #cfccc5;background:#fff;display:grid;place-items:center;color:#fff;flex:none}.r3x.on{background:#1c2a19;border-color:#1c2a19}.r3x svg{width:11px;height:11px}
 .r3chg{background:#faf9f7;border-radius:10px;padding:10px 14px;font-size:12.5px;line-height:1.6;color:#2b2a28}
 .r3chg div{display:flex;gap:8px}.r3chg div::before{content:"•";color:#8e8a86}
 .r3warn{margin-top:10px;font-size:12px;color:#9a5f14;background:#fbf3e4;border-radius:8px;padding:8px 12px;line-height:1.5}
@@ -2685,23 +2689,26 @@ function r3Diff(k, was, now){ const out = [];
   if(gone.length) out.push(`Values removed: ${gone.join(', ')}`); if(added.length) out.push(`Values added: ${added.join(', ')}`);
   return { out, gone }; }
 function r3Total(k){ return fUsers(k).reduce((n,t)=>n + r3Num(t.cnt), 0); }
-function retroDlg(){ const o = ST.retro, k = o.k, f = FL[k], total = r3Total(k), filled = Math.round(total*0.92);
-  const bad = o.typeChanged && f.k !== 'Text' ? Math.max(3, Math.round(filled*0.03)) : 0;
+var R3_ST = ['Draft','Out for signature','Signed'];
+var R3_SHARE = {'Draft':0.18,'Out for signature':0.06,'Signed':0.76};
+var r3Filled = k => Math.round(r3Total(k)*0.92);
+var r3Count = o => o.mode==='keep' ? r3Filled(o.k) : Math.round(r3Filled(o.k) * o.st.reduce((n,x)=>n+R3_SHARE[x],0));
+function retroDlg(){ const o = ST.retro, k = o.k, f = FL[k], n = r3Count(o);
   const eg = {'Date':'like “early next year” for a date','Number':'like “two years” for a number','Amount':'like “a few thousand” for an amount','Yes or no':'like “depends” for yes or no','Pick from a list':'any value that isn’t on the list','File':'any value that isn’t a file'}[f.k] || 'like “two years” for a number';
-  const scopeN = o.scope===R3_SCOPE[0] ? Math.round(filled*0.18) : o.scope===R3_SCOPE[2] ? Math.round(filled*0.41) : filled;
-  const opt3 = [['keep','Keep the values already filled in','Only documents that come in from now on use the new definition. Nothing already filled in changes.'],
-    ['suggest','Re-check them, and ask before changing anything','Clavia reads those documents again. Where it finds something different, the old value stays and the new one waits as a suggestion for a person to accept.'],
-    ['update','Re-check them, and update what Clavia filled in','Clavia replaces the values it filled in itself. Values a person checked are never overwritten.']];
-  return dlg(`“${esc(k)}” is already filled in on ${filled.toLocaleString('en-GB')} documents`, 'You changed how this field is defined. Pick what happens to the values already there.', `
-    <div class="r3chg">${o.changes.map(c=>`<div>${esc(c)}</div>`).join('')}</div>
-    <div class="lab" style="margin-top:16px">Existing values</div>
-    <div class="hbg">${opt3.map(([v,t,ds])=>`<button class="hbo${o.mode===v?' on':''}" data-a="r3:mode:${v}"><span class="optr"></span><span><span class="n">${t}${v==='suggest'?' <span class="tag" style="margin-left:4px">Recommended</span>':''}</span><span class="d">${ds}</span></span></button>`).join('')}</div>
-    ${o.mode!=='keep'?`<div class="lab" style="margin-top:16px">Which documents</div><select class="in" data-r3="scope">${R3_SCOPE.map(s=>`<option${s===o.scope?' selected':''}>${esc(s)}</option>`).join('')}</select>
-      <div class="dim" style="font-size:11.5px;margin-top:4px">${scopeN.toLocaleString('en-GB')} documents would be re-checked.${o.scope===R3_SCOPE[1]?' Signed contracts keep their signed copy; only the field on the contract page changes.':''}</div>`:''}
-    ${o.gone.length?`<div class="lab" style="margin-top:16px">Values you removed</div><div class="r3map">${o.gone.map(v=>{ const n = 3 + r3Seed(v)%40; const left = (f.opts||[]); const cur = o.map[v] || 'Leave it as it is';
-      return `<div class="r3mr"><span>${esc(v)}<small>On ${n} documents</small></span><select class="in mini" data-r3="map.${esc(v)}">${['Leave it as it is'].concat(left.map(x=>'Change to '+x)).concat(['Clear it, a person fills it in']).map(x=>`<option${x===cur?' selected':''}>${esc(x)}</option>`).join('')}</select></div>`; }).join('')}</div>`:''}
-    ${bad && o.mode!=='keep'?`<div class="r3warn">About ${bad} values can't be read as ${esc(f.k)}, ${eg}. Those go to a person to fix, whichever option you pick.</div>`:''}`,
-    `<button class="lnk" data-a="r3:back" style="margin-right:auto">Back to the field</button>${B('Save and apply','r3:save','dk')}`, 600); }
+  const opts = [['keep','Keep the values already filled in','Only documents that come in from now on use the new definition.'],
+    ['recheck','Re-check them','Clavia reads them again. Anything different waits for a person to accept.']];
+  const sel = o.st.length ? o.st.join(', ') : 'Pick at least one';
+  return dlg(`Apply the change to “${esc(k)}”?`, 'You changed how this field is defined. Pick what happens to the values already filled in.', `
+    <div class="r3n"><b>${n.toLocaleString('en-GB')}</b><span>${o.mode==='keep'?'documents keep the value they have':'documents will be re-checked'}</span></div>
+    <div class="lab" style="margin-top:18px">Existing values</div>
+    <div class="hbg">${opts.map(([v,t,ds])=>`<button class="hbo${o.mode===v?' on':''}" data-a="r3:mode:${v}"><span class="optr"></span><span><span class="n">${t}</span><span class="d">${ds}</span></span></button>`).join('')}</div>
+    ${o.mode==='recheck'?`<div class="lab" style="margin-top:16px">Which documents</div>
+      <div class="pk r3ms"><button class="in pkb" data-a="r3:stopen" aria-haspopup="listbox" aria-expanded="${o.stOpen?'true':'false'}"><span class="pkn${o.st.length?'':' noone'}">${esc(sel)}</span><span class="pkc">⌄</span></button>
+      ${o.stOpen?`<div class="pkm" role="listbox" aria-multiselectable="true">${R3_ST.map(x=>{ const on = o.st.includes(x); return `<button class="pki" role="option" aria-selected="${on}" data-a="r3:st:${x}"><span class="r3x${on?' on':''}">${on?ICO_OK:''}</span><span>${esc(x)}</span></button>`; }).join('')}</div>`:''}</div>`:''}
+    ${o.gone.length?`<div class="lab" style="margin-top:16px">Values you removed</div><div class="r3map">${o.gone.map(v=>{ const cur = o.map[v] || 'Leave it as it is';
+      return `<div class="r3mr"><span>${esc(v)}</span><select class="in mini" data-r3="map.${esc(v)}">${['Leave it as it is'].concat((f.opts||[]).map(x=>'Change to '+x)).concat(['Clear it, a person fills it in']).map(x=>`<option${x===cur?' selected':''}>${esc(x)}</option>`).join('')}</select></div>`; }).join('')}</div>`:''}
+    ${o.typeChanged && f.k!=='Text' && o.mode==='recheck'?`<div class="r3warn">Some values may not fit the new type, ${eg}. Those go to a person to fix.</div>`:''}`,
+    `<button class="lnk" data-a="r3:back" style="margin-right:auto">Back to the field</button><button class="btn dk" data-a="r3:save"${o.mode==='recheck'&&!o.st.length?' disabled':''}>Save and apply</button>`, 560); }
 const _r3Ov = overlay;
 overlay = function(){ if(ST.retro) return retroDlg(); return _r3Ov(); };
 const _r3Dlg = fdDlg;
@@ -2721,14 +2728,16 @@ act = function(s){
   if(s==='close' && ST.retro){ ST.retro = null; return render(); }
   if(s==='close' && ST.fd && !ST.fd.isNew && !ST.retro && ST.fd.snap){ const k = FLK()[ST.fd.i], was = JSON.parse(ST.fd.snap).FL[k], now = FL[k];
     if(was && now && fUsers(k).length){ const d = r3Diff(k, was, now);
-      if(d.out.length){ ST.retro = {k, changes:d.out, gone:d.gone, typeChanged: was.k!==now.k, mode:'suggest', scope:R3_SCOPE[0], map:{}, fd:ST.fd}; return render(); } } }
+      if(d.out.length){ ST.retro = {k, changes:d.out, gone:d.gone, typeChanged: was.k!==now.k, mode:'recheck', st:['Draft','Out for signature'], map:{}, fd:ST.fd}; return render(); } } }
   if(!s.startsWith('r3:')) return _r3Act(s);
   const o = ST.retro, [, x, y] = s.split(':');
   if(x==='mode'){ o.mode = y; return render(); }
   if(x==='back'){ ST.retro = null; return render(); }
-  if(x==='save'){ const k = o.k, filled = Math.round(r3Total(k)*0.92), n = o.mode==='keep' ? 0 : o.scope===R3_SCOPE[0] ? Math.round(filled*0.18) : o.scope===R3_SCOPE[2] ? Math.round(filled*0.41) : filled;
-    const review = o.mode==='keep' ? 0 : Math.round(n*(o.mode==='suggest'?0.06:0.02)) + (o.typeChanged && FL[k].k!=='Text'?Math.max(3,Math.round(filled*0.03)):0);
-    FL[k].retro = {mode:o.mode, scope:o.scope, total:n, done:0, review, at:'today', map:o.map};
+  if(x==='stopen'){ o.stOpen = !o.stOpen; return render(); }
+  if(x==='st'){ const v = s.slice(6); o.st = o.st.includes(v) ? o.st.filter(z=>z!==v) : R3_ST.filter(z=>z===v || o.st.includes(z)); return render(); }
+  if(x==='save'){ const k = o.k, n = r3Count(o); if(o.mode==='recheck' && !o.st.length) return;
+    const review = o.mode==='keep' ? 0 : Math.round(n*0.06) + (o.typeChanged && FL[k].k!=='Text' ? Math.max(3, Math.round(r3Filled(k)*0.03)) : 0);
+    FL[k].retro = {mode:o.mode, st:o.st, total:o.mode==='keep'?0:n, done:0, review, at:'today', map:o.map};
     ST.retro = null; ST.fd = null;
     if(o.mode==='keep'){ render(); return toast(`Saved. Values already filled in for “${k}” stay as they are.`); }
     r3Run(k); render(); return toast(`Saved. Re-checking “${k}” on ${n.toLocaleString('en-GB')} documents.`); }
@@ -2736,6 +2745,106 @@ act = function(s){
 document.addEventListener('change', ev => { const el = ev.target, id = el.dataset && el.dataset.r3; if(!id || !ST.retro) return; ev.stopImmediatePropagation();
   if(id==='scope') ST.retro.scope = el.value; else if(id.startsWith('map.')) ST.retro.map[id.slice(4)] = el.value; render(); }, true);
 document.addEventListener('keydown', ev => { if(ev.key==='Escape' && ST.retro){ ev.stopImmediatePropagation(); ST.retro = null; render(); } }, true);
+render();
+</script>
+<style>
+/* v33: connectors with the apps' own icons, Disconnect on hover, and settings for Slack and Teams */
+#sbody .cxl{margin:0 -14px}
+#sbody .cxr{display:flex;align-items:center;gap:16px;padding:12px 14px;border-radius:14px}
+#sbody .cxr:hover,#sbody .cxr:focus-within{background:#f8f7f4}
+#sbody .cxr.cl{cursor:pointer}
+#sbody .cxi{width:26px;height:26px;flex:none;object-fit:contain}
+#sbody .cxm{flex:1;min-width:0}
+#sbody .cxn{font-size:14.5px!important;font-weight:500;color:#201f1e}
+#sbody .cxd{font-size:13px!important;color:#8e8a86;margin-top:1px}
+#sbody .cxb{border:1px solid #e6e4df;background:#fff;border-radius:8px;padding:6px 14px;font:400 13px var(--sans);color:#4a4745;cursor:pointer;white-space:nowrap}
+#sbody .cxb:hover{border-color:#cfccc5;color:#201f1e}
+#sbody .cxr .cxdis{visibility:hidden}
+#sbody .cxr:hover .cxdis,#sbody .cxr:focus-within .cxdis{visibility:visible}
+#sbody .cxok{width:36px;display:grid;place-items:center;color:#2f6b3d;flex:none}#sbody .cxok svg{width:20px;height:20px}
+#sbody .cxgo{color:#b3afa9;font-size:15px;margin-left:-6px;width:10px}
+#sbody .cxhead{display:flex;align-items:center;gap:14px;margin:4px 0 6px}
+#sbody .cxhead .cxi{width:34px;height:34px}
+#sbody .cxsec{border-top:1px solid #ecebe7;padding:20px 0 6px;margin-top:18px}
+#sbody .cxst{font-size:14px!important;font-weight:600;color:#201f1e}
+#sbody .cxsd{font-size:12.5px!important;color:#8e8a86;margin:3px 0 12px;line-height:1.5}
+#sbody .cxchips{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+#sbody .cxchip{display:inline-flex;align-items:center;gap:6px;background:#f4f3f0;border-radius:999px;padding:4px 6px 4px 12px;font-size:13px;color:#201f1e}
+#sbody .cxchip button{border:0;background:none;cursor:pointer;color:#8e8a86;font-size:11px;width:18px;height:18px;border-radius:50%;display:grid;place-items:center;padding:0}
+#sbody .cxchip button:hover{background:#e6e4df;color:#2b2a28}
+#sbody .cxadd{position:relative}
+#sbody .cxadd > button{border:1px dashed #d8d5ce;background:#fff;border-radius:999px;padding:4px 12px;font:inherit;font-size:13px;color:#4a4745;cursor:pointer}
+#sbody .cxadd > button:hover{border-color:#a9a59d}
+#sbody .cxmenu{position:absolute;left:0;top:calc(100% + 6px);width:280px;background:#fff;border:1px solid #ecebe7;border-radius:12px;box-shadow:0 12px 30px rgba(0,0,0,.12);padding:6px;z-index:6;max-height:300px;overflow:auto}
+#sbody .cxmenu input{width:100%;border:1px solid #ecebe7;border-radius:8px;padding:7px 10px;font:inherit;font-size:13px;outline:none;margin-bottom:4px}
+#sbody .cxmi{display:flex;align-items:center;gap:10px;width:100%;border:0;background:none;padding:7px 9px;border-radius:7px;cursor:pointer;font:inherit;font-size:13px;text-align:left;color:#201f1e}
+#sbody .cxmi:hover{background:#f4f3f0}
+#sbody .cxbox{width:18px;height:18px;border-radius:5px;border:1.5px solid #cfccc5;background:#fff;display:grid;place-items:center;color:#fff;flex:none}
+#sbody .cxbox.on{background:#1c2a19;border-color:#1c2a19}#sbody .cxbox svg{width:11px;height:11px}
+#sbody .cxck{display:flex;gap:14px;align-items:flex-start;width:100%;border:0;background:none;padding:10px 0;cursor:pointer;text-align:left;font:inherit}
+#sbody .cxck .cxbox{width:22px;height:22px;border-radius:6px;margin-top:1px}#sbody .cxck .cxbox svg{width:13px;height:13px}
+#sbody .cxck b{display:block;font-size:14.5px;font-weight:500;color:#201f1e}
+#sbody .cxck span.d{display:block;font-size:13px;color:#8e8a86;line-height:1.55;margin-top:4px}
+</style>
+<script>
+/* ===== v33: Connectors — the apps' own icons, a check when connected, Disconnect on hover,
+   and Slack and Teams open their settings: which channels, and how Clavia replies ===== */
+var CX_ICON = {'Slack':'assets/brand/slack.svg','Microsoft Teams':'assets/brand/teams.svg','Microsoft Outlook':'assets/brand/outlook.svg','Gmail':'assets/brand/gmail.svg','Google Drive':'assets/brand/drive.svg','Google Calendar':'assets/brand/gcal.svg','Salesforce':'assets/brand/salesforce.svg'};
+var CX_CHECK = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4.5 12.5l5 5 10-11"/></svg>';
+(function(){
+  const want = [
+    {n:'Slack', d:'Search conversations, channels, and history', on:1, cfg:{label:'Channels', say:'Clavia reads and answers in these channels. It doesn’t post anywhere else.', all:['#ask-legal','#deals','#legal-team','#partnerships','#sales','#procurement','#general'], pick:['#ask-legal','#deals'], thread:1, emoji:0}},
+    {n:'Microsoft Teams', d:'Search chats and channels, and answer where people ask', on:1, cfg:{label:'Teams and channels', say:'Clavia reads and answers in these channels. It doesn’t post anywhere else.', all:['Legal › Requests','Sales › Deal desk','Partnerships › General','Finance › Procurement','Lumen › Announcements'], pick:['Legal › Requests','Sales › Deal desk'], thread:1, emoji:0}},
+    {n:'Microsoft Outlook', d:'Search, send, and manage emails and contacts.', on:0},
+    {n:'Gmail', d:'Send and manage emails.', on:1},
+    {n:'Google Drive', d:'Store, organize, and share files.', on:1},
+    {n:'Google Calendar', d:'Manage Google Calendar events, meetings, and availability', on:0},
+    {n:'Salesforce', d:'Fill contracts with customer and deal details', on:1}];
+  CONS.length = 0; want.forEach(w => CONS.push(w));
+  for (let i = CMORE.length - 1; i >= 0; i--) if (CMORE[i].n === 'Microsoft Teams') CMORE.splice(i, 1);
+})();
+var cxImg = n => CX_ICON[n] ? `<img class="cxi" src="${CX_ICON[n]}" alt="">` : conIcon('page', '#4a4745');
+PG.connectors = () => ST.cx!=null && CONS[ST.cx] ? cxPage(ST.cx) : `<div class="ct cons">
+  <h2 class="t">Connect with apps</h2><p class="lead">Allow Clavia to reference other apps and services for more context and take actions with tools</p>
+  <div class="cxl">${CONS.map((a,i)=>{ const go = a.on && a.cfg;
+    return `<div class="cxr${go?' cl':''}"${go?` data-a="cx:open:${i}" tabindex="0" aria-label="${esc(a.n)} settings"`:''}>${cxImg(a.n)}<div class="cxm"><div class="cxn">${esc(a.n)}</div><div class="cxd">${esc(a.d)}</div></div>
+      ${a.on?`<button class="cxb cxdis" data-a="cx:off:${i}">Disconnect</button><span class="cxok" title="Connected">${CX_CHECK}</span>`:`<button class="cxb" data-a="cx:on:${i}">Connect</button>`}</div>`; }).join('')}</div></div>`;
+function cxPage(i){ const a = CONS[i], c = a.cfg, open = ST.cxMenu, q = (ST.cxQ||'').toLowerCase();
+  const box = on => `<span class="cxbox${on?' on':''}">${on?ICO_OK:''}</span>`;
+  const ck = (k, t, d) => `<button class="cxck" data-a="cx:t:${k}" role="checkbox" aria-checked="${c[k]?'true':'false'}">${box(c[k])}<span><b>${t}</b><span class="d">${d}</span></span></button>`;
+  return `<div class="ct"><div class="subhd"><button class="lnk" data-a="cx:back">‹ Connectors</button></div>
+  <div class="cxhead">${cxImg(a.n)}<div style="flex:1;min-width:0"><h2 class="t" style="margin:0">${esc(a.n)}</h2><div class="cxd">Connected as priya.shah@lumen.io</div></div><button class="cxb" data-a="cx:off:${i}">Disconnect</button></div>
+  <div class="cxsec"><div class="cxst">${c.label}</div><div class="cxsd">${c.say}</div>
+    <div class="cxchips">${c.pick.map((x,j)=>`<span class="cxchip">${esc(x)}<button data-a="cx:rm:${j}" aria-label="Remove ${esc(x)}">✕</button></span>`).join('')}
+      <span class="cxadd"><button data-a="cx:menu" aria-haspopup="listbox" aria-expanded="${open?'true':'false'}">+ ${c.pick.length?'Add more':'Pick channels'}</button>
+      ${open?`<div class="cxmenu" role="listbox" aria-multiselectable="true"><input data-cx="q" value="${esc(ST.cxQ||'')}" placeholder="Search channels" aria-label="Search channels">${c.all.filter(x=>x.toLowerCase().includes(q)).map(x=>`<button class="cxmi" role="option" aria-selected="${c.pick.includes(x)}" data-a="cx:pick:${c.all.indexOf(x)}">${box(c.pick.includes(x))}<span>${esc(x)}</span></button>`).join('')||'<div class="dim" style="padding:8px 9px;font-size:12.5px">No channel by that name</div>'}</div>`:''}</span></div></div>
+  <div class="cxsec"><div class="cxst">Replies</div><div class="cxsd">How Clavia answers in ${esc(a.n)}.</div>
+    ${ck('thread','Reply within thread','When enabled, the AI agent will reply in the same thread as the original message instead of posting a new message in the channel.')}
+    ${ck('emoji','Show thinking as emoji reactions','When enabled, the AI agent will not post chain-of-thought updates as messages. Instead, it will react with emoji')}</div></div>`; }
+const _cxAct = act;
+act = function(s){
+  if(s.startsWith('go:')){ ST.cx = null; ST.cxMenu = 0; }
+  if(!s.startsWith('cx:')) return _cxAct(s);
+  const [, x, y] = s.split(':'), a = ST.cx!=null ? CONS[ST.cx] : null;
+  switch(x){
+    case 'open': ST.cx = +y; ST.cxMenu = 0; ST.cxQ = ''; ST.reset = true; break;
+    case 'back': ST.cx = null; ST.cxMenu = 0; ST.reset = true; break;
+    case 'off': { const c = CONS[+y]; c.on = 0; ST.cx = null; ST.cxMenu = 0; return toast(c.n+' disconnected'); }
+    case 'on': { const c = CONS[+y]; c.on = 1; return toast(c.n+' connected'); }
+    case 'menu': ST.cxMenu = !ST.cxMenu; ST.cxQ = ''; break;
+    case 'pick': { const v = a.cfg.all[+y], p = a.cfg.pick; a.cfg.pick = p.includes(v) ? p.filter(z=>z!==v) : a.cfg.all.filter(z=>z===v || p.includes(z)); break; }
+    case 'rm': a.cfg.pick.splice(+y,1); break;
+    case 't': a.cfg[y] = a.cfg[y] ? 0 : 1; return toast('Saved');
+  }
+  render();
+  if(x==='menu' && ST.cxMenu){ const n = document.querySelector('[data-cx="q"]'); if(n) n.focus(); } };
+document.addEventListener('input', ev => { const el = ev.target; if(!(el.dataset && el.dataset.cx==='q')) return; ev.stopImmediatePropagation();
+  ST.cxQ = el.value; render(); const n = document.querySelector('[data-cx="q"]'); if(n){ n.focus(); n.setSelectionRange(n.value.length, n.value.length); } }, true);
+document.addEventListener('click', e => { const t = e.target;
+  if(ST.cxMenu && !(t.closest && t.closest('.cxadd'))){ ST.cxMenu = 0; render(); }
+  if(ST.retro && ST.retro.stOpen && !(t.closest && t.closest('.r3ms'))){ ST.retro.stOpen = 0; render(); } }, true);
+document.addEventListener('keydown', e => { if(e.key==='Escape' && ST.cxMenu){ e.stopImmediatePropagation(); ST.cxMenu = 0; render(); }
+  if((e.key==='Enter'||e.key===' ') && e.target.matches && e.target.matches('.cxr.cl')){ e.preventDefault(); e.target.click(); } }, true);
 render();
 </script>
 <style>

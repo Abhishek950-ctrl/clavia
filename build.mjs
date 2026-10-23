@@ -93,7 +93,7 @@ html = inlineAssets(html);
 /* the Settings window (settings-v2.js) carries its page as a string; inside a
    <script> nothing may read as a closing tag or a comment opener */
 html = html.replace('"__SETTINGS_V2_HTML__"', () =>
-  JSON.stringify(read('settings-v2.html')).replace(/<\//g, '<\\/').replace(/<!--/g, '<\\!--'));
+  JSON.stringify(inlineAssets(read('settings-v2.html'))).replace(/<\//g, '<\\/').replace(/<!--/g, '<\\!--'));
 
 mkdirSync(dist, { recursive: true });
 writeFileSync(join(dist, 'app.html'), html);
