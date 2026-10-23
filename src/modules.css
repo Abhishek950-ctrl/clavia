@@ -3785,6 +3785,8 @@ html.vt-cmts::view-transition-new(rqp-doc), html.vt-cmts::view-transition-new(rq
 .rqp-cp-sec--doc { display: flex; align-items: center; gap: 8px; margin-top: 6px; color: var(--text); font-weight: 500; text-transform: none; letter-spacing: 0; font-size: 13px; }
 .rqp-cp-sec--doc .mx-tile { flex: none; transform: scale(.8); }
 .rqp-cp-sec-n { font-weight: 400; color: var(--text-faint); font-size: 12px; }
+/* every document after the first starts below a rule, with room above it, so the groups read apart */
+.rqp-cpanel .rqp-cp-sec--doc ~ .rqp-cp-sec--doc { margin-top: 22px; padding-top: 16px; border-top: 1px solid var(--line); }
 .rqp-crumbs { display: inline-flex; align-items: center; gap: 6px; min-width: 0; }
 .rqp-crumbs-sep { color: var(--text-faint); font-size: 13px; }
 .rqp-crumbs-id { font-size: 13px; font-weight: 500; color: var(--text); font-variant-numeric: tabular-nums; white-space: nowrap; }

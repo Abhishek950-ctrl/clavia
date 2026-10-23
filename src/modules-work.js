@@ -2918,9 +2918,8 @@ function intakePage(r, opts = {}) {
         /* the negotiation word ("With Brightwell", "3 to answer"), off 15 Oct: rows show only the comment count */
         ((rs) => DOC_ROUND_CHIP && rs ? h('button', { class: 'rqp-dc-round is-' + rs.k, type: 'button', 'data-tip': 'Open the round',
           onclick: (e) => { e.stopPropagation(); openReview(d.id); } }, rs.say) : null)(mxRoundSay(r, d)),
-        /* its status, as a symbol beside the version: hover for who signs and where each stands */
-        docStIc(d),
-        ver, docDots(d));
+        /* its status, as a symbol after the version: hover for who signs and where each stands */
+        ver, docStIc(d), docDots(d));
   };
   /* the other side's changes on a document out for signature are settled: they read, but do not change */
   const reviewLocked = (id) => { const d = docs.find(x => x.id === id), rv = [].concat(review(id)).filter(Boolean);
