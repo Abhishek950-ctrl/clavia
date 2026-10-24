@@ -1082,7 +1082,7 @@ function overlay(){ const o = ST.ov; if(!o) return ''; const k = o.k, i = o.i, d
       `${L('Remove detail','detrm:'+i,1)}<span class="sp"></span>${B('Done','close','dk')}`); }
   if(k==='conn'){ const a = D.apps[i];
     if(o.step===0) return dlg('Connect '+a[2],'', `<div class="row" style="gap:12px;margin-bottom:12px">${logo(a[0],a[1])}<div>Clavia will send contracts through your ${a[2]} account and save the signed copy back in Repository.</div></div>
-      <div class="dim sm13">You'll sign in to ${a[2]} and allow Clavia. You need to be an admin of your company's ${a[2]} account.</div>`,
+      <div class="dim sm13">You'll need admin access to sign in.</div>`,
       `<span class="sp"></span>${cancel}${B('Continue to '+a[2],'cnext','dk')}`);
     if(o.step===1) return dlg('Connect '+a[2],'', `<div class="ext"><div class="bar" style="background:${a[1]}">${a[2]}</div><div class="bd"><div>Signed in as roger.bennett@lumen.io</div><div style="margin-top:10px;font-weight:500">Clavia would like to:</div><ul><li>Send documents for signing</li><li>See who has signed</li><li>Download signed documents</li></ul><div class="row" style="margin-top:14px"><span class="sp"></span>${B('Cancel','close','sm')}${B('Allow','cnext','sm dk')}</div></div></div>`,
       `<span class="dim sm13">This window is ${a[2]}'s own page.</span>`);
@@ -1093,7 +1093,7 @@ function overlay(){ const o = ST.ov; if(!o) return ''; const k = o.k, i = o.i, d
   if(k==='app'){ const a = D.apps[i]; return dlg(a[2], 'Connected as roger.bennett@lumen.io', `${row(M('Used for'), V(cap(a[5].replace('Used for ',''))))}${row(M('Contracts signed this month'), V('14'))}`, `${L('Disconnect','disc:'+i,1)}<span class="sp"></span>${B('Done','close','dk')}`); }
   if(k==='signer'){ const s = i!==undefined?D.signers[i]:['','']; return dlg(i!==undefined?'Edit signer':'Add a signer','Clavia only lets these people sign for Lumen.', `${F('Which contracts', IN('s0', s[0], 'e.g. Contracts over £1m a year'))}${F('Who can sign', IN('s1', s[1], 'e.g. Grace Coleman'))}`, `<span class="sp"></span>${cancel}${B('Save','toast:Saved','dk')}`); }
   if(k==='req'){ const r = D.req[i]; return dlg(r[0], r[1], `<div class="dim" style="margin-bottom:6px">Questions people answer</div>${r[2].map((q,j)=>row(M((j+1)+'. '+q), L('Edit','noop'))).join('')}<div style="margin-top:10px">${L('Add a question','toast:Question added')}</div>`, `<span class="sp"></span>${B('Done','close','dk')}`); }
-  if(k==='invite') return dlg('Invite people','', `${F('Email addresses', IN('inv','zara.khan@lumen.io, leo.park@lumen.io'), 'Separate with commas.')}${F('Role', SEL('invrole', ['Member','Approver','Lawyer','Admin'], 'Member'))}`, `<span class="sp"></span>${cancel}${B('Send invites','toast:2 invites sent','dk')}`);
+  if(k==='invite') return dlg('Invite people','', `${F('Email addresses', IN('inv','zara.khan@lumen.io, leo.park@lumen.io'), 'Separate with commas.')}${F('Team', SEL('invrole', ['Member','Approver','Lawyer','Admin'], 'Member'))}`, `<span class="sp"></span>${cancel}${B('Send invites','toast:2 invites sent','dk')}`);
   if(k==='moreapps') return dlg('Add more apps','Pick where else you want to use Clavia.', EXTMORE.map((x,j)=>row(`${logo(x[0],x[1])}${M(x[2],x[3])}`, `<button class="btn sm wbtn" data-a="extadd:${j}">${ICO_PLUS2}Add</button>`)).join('') || '<p class="dim">You have added every app.</p>', `<span class="sp"></span>${B('Done','close','dk')}`, 500);
   if(k==='browse2') return dlg('Browse apps','', CMORE.map((a,j)=>row(`${appIcon(a.g,a.c)}${M(a.n,a.d)}`, `<button class="btn sm wbtn" data-a="cadd:${j}">${ICO_LINK}Connect</button>`)).join(''), `<span class="sp"></span>${B('Done','close','dk')}`, 500);
   if(k==='browse') return dlg('Browse apps','', [['O','#0078d4','Outlook'],['T','#5059c9','Microsoft Teams'],['H','#ff7a59','HubSpot'],['N','#000','Notion']].map(x=>row(`${logo(x[0],x[1])}${M(x[2])}`, B('Connect','toast:'+x[2]+' connected','sm'))).join(''), `<span class="sp"></span>${B('Done','close','dk')}`);
@@ -1226,7 +1226,7 @@ document.addEventListener('change', e => { const id = e.target.dataset.ch; if(!i
   if(id.startsWith('r.')){ const p = id.split('.'); if(p[1]==='1'){ o.d[1]=v; o.d[2]=opsFor(v)[0]; o.d[3]=''; return render(); } if(p[1]==='4') o.d[4][+p[2]]=v; else { o.d[+p[1]]=v; if(p[1]==='0'){ o.d[1]=(v==='Customer contract'||v==='All contracts')?'Yearly value':DETAILS_FOR(v)[0]; } if(p[1]==='0'||p[1]==='1'){ o.d[2]=opsFor(o.d[1])[0]; o.d[3]=''; } } return render(); }
   if(id==='d.type'){ o.d.type=v; o.d.sel=undefined; o.d.name=''; return render(); } if(id.startsWith('d.')){ o.d[id.slice(2)] = v; return render(); }
   if(id.startsWith('c.')){ o.d[id.slice(2)] = v; return; }
-  if(id.startsWith('role.')){ D.members[+id.slice(5)][3]=v; return toast('Role changed'); }
+  if(id.startsWith('role.')){ D.members[+id.slice(5)][3]=v; return toast('Team changed'); }
   if(id==='pd.s'){ ST.pd.s=v; return render(); }
   if(id==='me.team'){ D.me.team=v; ST.dirty=true; return render(); }
   if(id==='aptype'){ ST.aptype=v; return render(); } if(['dtype','first','sremind','expire','notifWhere','backup'].includes(id)) D[id]=v; else if(id.startsWith('sec.')) setP(D, id, v);
@@ -2961,7 +2961,7 @@ const _pgVault37 = PG.vault;
 PG.vault = () => _pgVault37().replace(/<span class="row" style="gap:8px;flex:none"><input class="in vkeepn"[\s\S]*?years<\/span><\/span>/, () => durIn('keep', durGet('keep'), DUR_U.keep));
 
 /* ===== Members: search, and Teams — what each team can do ===== */
-var TEAMS = [['Admin','Changes settings and manages people'],['Lawyer','Drafts, reviews and sends contracts'],['Approver','Says OK when an approval rule asks'],['Member','Asks legal for help']];
+var TEAMS = [['Admin','Runs Clavia for everyone'],['Lawyer','Drafts and sends contracts'],['Approver','Says OK when asked'],['Member','Asks legal for help']];
 var PERMS = ['Raise intake requests','Send for signature','Approve contracts','Manage playbooks and templates','Change settings'];
 var TPERM = {Admin:[1,1,1,1,1], Lawyer:[1,1,0,1,0], Approver:[1,0,1,0,0], Member:[1,0,0,0,0]};
 var ICO_SEARCH = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="11" cy="11" r="6.5"/><path d="m16 16 4.5 4.5"/></svg>';
@@ -2983,6 +2983,35 @@ act = function(s){
   return _mAct(s); };
 document.addEventListener('input', ev => { const el = ev.target; if(!(el.dataset && 'mq' in el.dataset)) return; ev.stopImmediatePropagation();
   ST.mq = el.value; render(); const n = document.querySelector('[data-mq]'); if(n){ n.focus(); n.setSelectionRange(n.value.length, n.value.length); } }, true);
+render();
+</script>
+<style>
+/* v38: every description on a Settings page is one line */
+#sbody .lead{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+</style>
+<script>
+/* ===== v38: connecting a signing service asks nothing about which contracts — the Signing rules
+   decide that — and descriptions are one line ===== */
+const _cnAct = act;
+act = function(s){ const o = ST.ov;
+  if(s==='cnext' && o && o.k==='conn' && o.step===1){ const a = D.apps[o.i]; a[4] = 1; a[5] = 'Used where a Signing rule picks it'; ST.ov = null; return toast(a[2]+' connected'); }
+  return _cnAct(s); };
+const _pgRouting38 = PG.routing;
+PG.routing = () => _pgRouting38().replace(/<p class="lead">When a request comes in[\s\S]*?<\/p>/, '<p class="lead">The first rule that fits a new request decides who gets it and when it\'s due. Drag ⠿ to reorder.</p>');
+const _pgAp38 = PG.approvals;
+PG.approvals = () => _pgAp38().replace(/<p class="lead">Before a contract goes out for signing[\s\S]*?<\/p>/, '<p class="lead">Every rule that fits adds people who must say OK before signing. Drag ⠿ to reorder.</p>');
+const _pgMem38 = PG.memory;
+PG.memory = () => _pgMem38().replace(/Bring relevant context and data from another AI provider to Clavia\.[^<]*/, 'Bring context over from another AI provider, using a prompt we give you.');
+const _cxPage38 = cxPage;
+cxPage = function(i){ return _cxPage38(i)
+  .replace(/When enabled, the AI agent will reply in the same thread[^<]*/, 'Replies in the thread of the original message, not as a new message in the channel.')
+  .replace(/When enabled, the AI agent will not post chain-of-thought[^<]*/, 'Reacts with emoji instead of posting its thinking as messages.')
+  .replace(/Clavia reads and answers in these channels\. It doesn’t post anywhere else\./g, 'Clavia reads and answers only in these channels.'); };
+/* confirmations say it in one line */
+const _ov38 = overlay;
+overlay = function(){ const h = _ov38(), o = ST.ind; if(!o || (o.k!=='confirm' && o.k!=='rscf')) return h;
+  const say = o.k==='confirm' ? 'Requests already in keep their owner and due date.' : o.set==='vt' ? 'Documents already in the vault stay where they are.' : o.set==='sg' ? 'Contracts already sent carry on as they are.' : 'Contracts already waiting carry on as they are.';
+  return h.replace(/<div class="cfnote">[\s\S]*?<\/div>/, () => `<div class="cfnote">${say}</div>`); };
 render();
 </script>
 <style>

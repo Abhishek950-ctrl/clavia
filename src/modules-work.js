@@ -3744,7 +3744,7 @@ function intakePage(r, opts = {}) {
       label ? null : h('p', { class: 'mx-ss-svc' }, `Sent with ${p.svc}. To change who signs for ${co}, change the rule in Settings.`));
     /* more than one envelope: one card each, with its documents, our signers and its service */
     const envCards = (es, n0) => h('div', { class: 'mx-ss-envs' },
-      h('p', { class: 'mx-ss-envs-say' }, `These documents follow different Signing rules, so they go as ${es.length} envelopes. ${r.counterparty || 'The other side'} signs each one.`),
+      h('p', { class: 'mx-ss-envs-say' }, `Different Signing rules apply, so these go as ${es.length} envelopes.`),
       ...es.map((e, i) => h('div', { class: 'mx-ss-env' },
         h('div', { class: 'mx-ss-env-h' }, h('b', {}, `Envelope ${i + 1}`), h('span', {}, e.rows.map(x => shortOf(docOf(x))).join(', ')), h('span', { class: 'pb-grow' }), h('span', { class: 'mx-ss-env-svc' }, e.plan.svc)),
         usBox(e.plan, n0, co))),
