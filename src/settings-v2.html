@@ -2891,6 +2891,101 @@ rfSync();
 render();
 </script>
 <style>
+/* v37: one duration input everywhere; Members search and Teams */
+.dur{display:inline-flex;align-items:center;gap:6px;flex:none}
+.dur .durt{font-size:12.5px;color:#4a4745}
+.dur input.durn{width:64px!important;flex:none;text-align:center;padding:5px 6px!important;font-size:12.5px!important;height:30px}
+.dur select.duru{width:auto!important;min-width:0;padding:5px 26px 5px 10px!important;font-size:12.5px!important;height:30px;background-position:right 9px center}
+.dlg .dur{display:flex}
+#sbody .mtabs{display:flex;gap:18px;border-bottom:1px solid #ecebe7;margin:2px 0 14px}
+#sbody .mtab{border:0;background:none;padding:8px 0;font:inherit;font-size:12.5px;color:#8e8a86;cursor:pointer;border-bottom:2px solid transparent;margin-bottom:-1px}
+#sbody .mtab.on{color:#201f1e;font-weight:600;border-bottom-color:#201f1e}
+#sbody .msearch{position:relative;margin:0 0 6px}
+#sbody .msearch input{width:100%;padding:8px 12px 8px 34px!important}
+#sbody .msearch svg{position:absolute;left:11px;top:50%;transform:translateY(-50%);width:15px;height:15px;color:#8e8a86}
+#sbody .mnone{padding:22px 0;text-align:center;font-size:12.5px;color:#8e8a86}
+#sbody .tmt{border:1px solid #ecebe7;border-radius:12px;overflow:hidden}
+#sbody .tmt table{width:100%;border-collapse:collapse;font-size:12.5px}
+#sbody .tmt th,#sbody .tmt td{padding:10px 12px;border-top:1px solid #f0efeb;text-align:center;vertical-align:middle}
+#sbody .tmt thead th{border-top:0;background:#faf9f7;font-weight:500;color:#4a4745;font-size:11.5px;line-height:1.35}
+#sbody .tmt tbody th{text-align:left;font-weight:500;color:#201f1e;width:30%}
+#sbody .tmt tbody th small{display:block;font-weight:400;font-size:11px!important;color:#8e8a86!important;margin-top:1px}
+#sbody .tmt .tychk{margin:0 auto}
+#sbody .tmnote{margin-top:10px;font-size:11.5px;color:#8e8a86;line-height:1.5}
+</style>
+<script>
+/* ===== v37: durations are typed — a number and a unit — wherever Settings asks "how long" =====
+   Signing reminders and link expiry, approval reminders, routing due dates and vault retention. */
+var DUR_U = { remind:['days','weeks','months'], expire:['days','weeks','months','years'], rem:['working days','days','weeks'], due:['working days','days','weeks'], keep:['months','years'] };
+var durParse = (s, def) => { const m = String(s||'').match(/(\d+)\s*([a-z ]*)/i); if(!m) return {n:1, u:def};
+  let u = (m[2]||'').trim().toLowerCase() || def; if(!/s$/.test(u)) u += 's'; return {n:+m[1], u}; };
+var durIn = (key, v, units, pre) => `<span class="dur">${pre?`<span class="durt">${pre}</span>`:''}<input class="in durn" type="number" min="1" max="999" step="1" data-dur="${key}" value="${v.n}" aria-label="How many"><select class="in mini duru" data-duru="${key}" aria-label="Unit">${units.map(u=>`<option${u===v.u?' selected':''}>${u}</option>`).join('')}</select></span>`;
+if(!/\d/.test(D.sremind)) D.sremind = 'Every 3 days';
+var durGet = key => key==='sremind' ? durParse(D.sremind, 'days') : key==='expire' ? durParse(D.expire, 'days')
+  : key==='rem' ? durParse(ST.ind && ST.ind.d.rem, 'working days') : key==='due' ? {n:(ST.ind&&ST.ind.d.due)||3, u:(ST.ind&&ST.ind.d.dueU)||'working days'}
+  : {n:D.vault.keepy||7, u:D.vault.keepu||'years'};
+function durSet(key, n, u){ n = Math.max(1, parseInt(n,10)||1); const one = n===1 ? u.replace(/s$/,'') : u;
+  if(key==='sremind') D.sremind = `Every ${n} ${one}`;
+  else if(key==='expire') D.expire = `After ${n} ${one}`;
+  else if(key==='rem' && ST.ind) ST.ind.d.rem = `${n} ${one}`;
+  else if(key==='due' && ST.ind){ ST.ind.d.due = n; ST.ind.d.dueU = u; }
+  else if(key==='keep'){ D.vault.keepy = n; D.vault.keepu = u; } }
+document.addEventListener('input', ev => { const el = ev.target, k = el.dataset && el.dataset.dur; if(!k) return; ev.stopImmediatePropagation();
+  const u = el.parentNode.querySelector('[data-duru]').value; durSet(k, el.value, u); }, true);
+document.addEventListener('change', ev => { const el = ev.target, k = el.dataset && (el.dataset.dur || el.dataset.duru); if(!k) return; ev.stopImmediatePropagation();
+  const box = el.parentNode, n = box.querySelector('[data-dur]'); if(+n.value < 1) n.value = 1; durSet(k, n.value, box.querySelector('[data-duru]').value);
+  if(el.dataset.duru && ['sremind','expire','keep'].includes(k)) toast('Saved'); }, true);
+
+/* Signing: who may send is set by Teams now, so it is not asked here */
+PG.sign = () => `<div class="ct sg" style="max-width:none">${head('Signing','Define who signs for Lumen and which service sends each contract for signing.', `<button class="btn dk sm wbtn" data-a="rs:new:sg" style="min-width:0">${ICO_PLUS2}New rule</button>`)}
+  ${rsTable('sg')}
+  <h3 class="s">Sign with</h3>
+  ${D.apps.map((s,i)=>`<div class="r con">${appIcon('pen', s[1])}<div class="m"><div class="n">${s[2]}${i===0?' <span class="tag">Built in</span>':''}</div><div class="d">${s[4]&&i?esc(s[5]):s[3]}</div></div>
+    ${s[4]?`<span class="active">Active</span>${i?`<span class="kebab-wrap"><button class="kebab" data-a="smenu:${i}" aria-label="More options for ${s[2]}">⋮</button>${ST.smenu===i?`<div class="cmenu"><button data-a="dlg:app:${i}">${ICO_EDIT2}Manage</button><button data-a="disc:${i}">${ICO_UNLINK}Disable connection</button></div>`:''}</span>`:'<span style="width:28px"></span>'}`:`<button class="btn sm wbtn" data-a="dlg:conn:${i}">${ICO_LINK}Connect</button>`}</div>`).join('')}
+  <h3 class="s">How signing works</h3>
+  ${row(M('Remind people who haven\'t signed'), durIn('sremind', durGet('sremind'), DUR_U.remind, 'Every'))}
+  ${row(M('Signing link stops working'), durIn('expire', durGet('expire'), DUR_U.expire, 'After'))}</div>`;
+
+/* Approvals: the reminder in a rule */
+const _rsDlg37 = rsDlg;
+rsDlg = function(){ const h = _rsDlg37(); if(!ST.ind || ST.ind.set!=='ap') return h;
+  return h.replace(/<select class="in" data-in="r\.rem">[\s\S]*?<\/select>/, () => durIn('rem', durGet('rem'), DUR_U.rem)); };
+/* Routing: when it's due */
+const _rDlg37 = rDlg;
+rDlg = function(){ return _rDlg37().replace(/<select class="in" data-in="r\.due">[\s\S]*?<\/select>/, () => durIn('due', durGet('due'), DUR_U.due)); };
+var dueText = r => `${r.due} ${r.due===1 ? (r.dueU||'working days').replace(/s$/,'') : (r.dueU||'working days')}`;
+const _pgRouting37 = PG.routing;
+PG.routing = () => { let h = _pgRouting37(); [...RR, RFALL].forEach(r => { h = h.replace(`<span class="rd">${r.due} days</span>`, () => `<span class="rd" data-k>${dueText(r)}</span>`); }); return h.replace(/ data-k>/g, '>'); };
+/* Vault: how long documents are kept */
+const _pgVault37 = PG.vault;
+PG.vault = () => _pgVault37().replace(/<span class="row" style="gap:8px;flex:none"><input class="in vkeepn"[\s\S]*?years<\/span><\/span>/, () => durIn('keep', durGet('keep'), DUR_U.keep));
+
+/* ===== Members: search, and Teams — what each team can do ===== */
+var TEAMS = [['Admin','Changes settings and manages people'],['Lawyer','Drafts, reviews and sends contracts'],['Approver','Says OK when an approval rule asks'],['Member','Asks legal for help']];
+var PERMS = ['Raise intake requests','Send for signature','Approve contracts','Manage playbooks and templates','Change settings'];
+var TPERM = {Admin:[1,1,1,1,1], Lawyer:[1,1,0,1,0], Approver:[1,0,1,0,0], Member:[1,0,0,0,0]};
+var ICO_SEARCH = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="11" cy="11" r="6.5"/><path d="m16 16 4.5 4.5"/></svg>';
+PG.members = () => { const tab = ST.mtab || 'members', q = (ST.mq||'').toLowerCase();
+  const list = D.members.map((m,i)=>[m,i]).filter(([m]) => !q || (m[1]+' '+m[2]+' '+m[3]).toLowerCase().includes(q));
+  return `<div class="ct">${head('Members','Who uses Clavia, and what each team can do.', tab==='members' ? B('Invite people','dlg:invite','dk sm') : '')}
+  <div class="mtabs" role="tablist"><button class="mtab${tab==='members'?' on':''}" role="tab" aria-selected="${tab==='members'}" data-a="mt:members">Members <span class="dim">${D.members.length}</span></button><button class="mtab${tab==='teams'?' on':''}" role="tab" aria-selected="${tab==='teams'}" data-a="mt:teams">Teams <span class="dim">${TEAMS.length}</span></button></div>
+  ${tab==='members' ? `<div class="msearch">${ICO_SEARCH}<input class="in" data-mq value="${esc(ST.mq||'')}" placeholder="Search by name, email or team" aria-label="Search members"></div>
+    ${list.length ? list.map(([m,i])=>row(`<span class="av">${m[0]}</span>${M(m[1],m[2])}`, SEL('role.'+i, TEAMS.map(t=>t[0]), m[3], 'in mini'))).join('') : `<div class="mnone">No one matches “${esc(ST.mq)}”</div>`}`
+  : `<div class="tmt"><table><thead><tr><th style="text-align:left">Team</th>${PERMS.map(p=>`<th>${p}</th>`).join('')}</tr></thead>
+    <tbody>${TEAMS.map(([t,d])=>`<tr><th>${t}<small>${d} · ${((n)=>n+(n===1?' person':' people'))(D.members.filter(m=>m[3]===t).length)}</small></th>${PERMS.map((p,j)=>{ const on = TPERM[t][j], lock = t==='Admin' && j===4;
+      return `<td><button class="tychk${on?' on':''}" data-a="${lock?'noop':'tp:'+t+':'+j}" role="checkbox" aria-checked="${on?'true':'false'}" aria-label="${esc(t)}: ${esc(p)}"${lock?' title="Admins always change settings" style="opacity:.55;cursor:default"':''}>${on?ICO_OK:''}</button></td>`; }).join('')}</tr>`).join('')}</tbody></table></div>
+    <p class="tmnote">Each person is in one team, picked on the Members tab. Signing rules decide who signs; this decides who can send.</p>`}</div>`; };
+const _mAct = act;
+act = function(s){
+  if(s.startsWith('mt:')){ ST.mtab = s.slice(3); return render(); }
+  if(s.startsWith('tp:')){ const [, t, j] = s.split(':'); TPERM[t][+j] = TPERM[t][+j] ? 0 : 1; return toast(`${t}: ${PERMS[+j].toLowerCase()} ${TPERM[t][+j]?'on':'off'}`); }
+  if(s.startsWith('go:')) ST.mq = '';
+  return _mAct(s); };
+document.addEventListener('input', ev => { const el = ev.target; if(!(el.dataset && 'mq' in el.dataset)) return; ev.stopImmediatePropagation();
+  ST.mq = el.value; render(); const n = document.querySelector('[data-mq]'); if(n){ n.focus(); n.setSelectionRange(n.value.length, n.value.length); } }, true);
+render();
+</script>
+<style>
 /* inside the Clavia app: only the Settings window, over the real app */
 html,body{background:transparent!important}
 .wrap,.framebox,.frame{background:transparent!important;box-shadow:none!important}
