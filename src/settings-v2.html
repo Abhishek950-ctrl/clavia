@@ -2972,7 +2972,7 @@ PG.members = () => { const tab = ST.mtab || 'members', q = (ST.mq||'').toLowerCa
   ${tab==='members' ? `<div class="msearch">${ICO_SEARCH}<input class="in" data-mq value="${esc(ST.mq||'')}" placeholder="Search by name, email or team" aria-label="Search members"></div>
     ${list.length ? list.map(([m,i])=>row(`<span class="av">${m[0]}</span>${M(m[1],m[2])}`, SEL('role.'+i, TEAMS.map(t=>t[0]), m[3], 'in mini'))).join('') : `<div class="mnone">No one matches “${esc(ST.mq)}”</div>`}`
   : `<div class="tmt"><table><thead><tr><th style="text-align:left">Team</th>${PERMS.map(p=>`<th>${p}</th>`).join('')}</tr></thead>
-    <tbody>${TEAMS.map(([t,d])=>`<tr><th>${t}<small>${d} · ${((n)=>n+(n===1?' person':' people'))(D.members.filter(m=>m[3]===t).length)}</small></th>${PERMS.map((p,j)=>{ const on = TPERM[t][j], lock = t==='Admin' && j===4;
+    <tbody>${TEAMS.map(([t,d])=>`<tr><th>${t}<small>${d}</small></th>${PERMS.map((p,j)=>{ const on = TPERM[t][j], lock = t==='Admin' && j===4;
       return `<td><button class="tychk${on?' on':''}" data-a="${lock?'noop':'tp:'+t+':'+j}" role="checkbox" aria-checked="${on?'true':'false'}" aria-label="${esc(t)}: ${esc(p)}"${lock?' title="Admins always change settings" style="opacity:.55;cursor:default"':''}>${on?ICO_OK:''}</button></td>`; }).join('')}</tr>`).join('')}</tbody></table></div>
     <p class="tmnote">Each person is in one team, picked on the Members tab. Signing rules decide who signs; this decides who can send.</p>`}</div>`; };
 const _mAct = act;
