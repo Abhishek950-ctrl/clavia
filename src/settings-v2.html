@@ -1093,7 +1093,7 @@ function overlay(){ const o = ST.ov; if(!o) return ''; const k = o.k, i = o.i, d
   if(k==='app'){ const a = D.apps[i]; return dlg(a[2], 'Connected as roger.bennett@lumen.io', `${row(M('Used for'), V(cap(a[5].replace('Used for ',''))))}${row(M('Contracts signed this month'), V('14'))}`, `${L('Disconnect','disc:'+i,1)}<span class="sp"></span>${B('Done','close','dk')}`); }
   if(k==='signer'){ const s = i!==undefined?D.signers[i]:['','']; return dlg(i!==undefined?'Edit signer':'Add a signer','Clavia only lets these people sign for Lumen.', `${F('Which contracts', IN('s0', s[0], 'e.g. Contracts over £1m a year'))}${F('Who can sign', IN('s1', s[1], 'e.g. Grace Coleman'))}`, `<span class="sp"></span>${cancel}${B('Save','toast:Saved','dk')}`); }
   if(k==='req'){ const r = D.req[i]; return dlg(r[0], r[1], `<div class="dim" style="margin-bottom:6px">Questions people answer</div>${r[2].map((q,j)=>row(M((j+1)+'. '+q), L('Edit','noop'))).join('')}<div style="margin-top:10px">${L('Add a question','toast:Question added')}</div>`, `<span class="sp"></span>${B('Done','close','dk')}`); }
-  if(k==='invite') return dlg('Invite people','', `${F('Email addresses', IN('inv','zara.khan@lumen.io, leo.park@lumen.io'), 'Separate with commas.')}${F('Team', SEL('invrole', ['Member','Approver','Lawyer','Admin'], 'Member'))}`, `<span class="sp"></span>${cancel}${B('Send invites','toast:2 invites sent','dk')}`);
+  if(k==='invite') return dlg('Invite people','', `${F('Email addresses', IN('inv','zara.khan@lumen.io, leo.park@lumen.io'), 'Separate with commas.')}${F('Team', SEL('invrole', TEAMS.map(t=>t[0]).reverse(), 'Member'))}`, `<span class="sp"></span>${cancel}${B('Send invites','toast:2 invites sent','dk')}`);
   if(k==='moreapps') return dlg('Add more apps','Pick where else you want to use Clavia.', EXTMORE.map((x,j)=>row(`${logo(x[0],x[1])}${M(x[2],x[3])}`, `<button class="btn sm wbtn" data-a="extadd:${j}">${ICO_PLUS2}Add</button>`)).join('') || '<p class="dim">You have added every app.</p>', `<span class="sp"></span>${B('Done','close','dk')}`, 500);
   if(k==='browse2') return dlg('Browse apps','', CMORE.map((a,j)=>row(`${appIcon(a.g,a.c)}${M(a.n,a.d)}`, `<button class="btn sm wbtn" data-a="cadd:${j}">${ICO_LINK}Connect</button>`)).join(''), `<span class="sp"></span>${B('Done','close','dk')}`, 500);
   if(k==='browse') return dlg('Browse apps','', [['O','#0078d4','Outlook'],['T','#5059c9','Microsoft Teams'],['H','#ff7a59','HubSpot'],['N','#000','Notion']].map(x=>row(`${logo(x[0],x[1])}${M(x[2])}`, B('Connect','toast:'+x[2]+' connected','sm'))).join(''), `<span class="sp"></span>${B('Done','close','dk')}`);
@@ -3012,6 +3012,64 @@ const _ov38 = overlay;
 overlay = function(){ const h = _ov38(), o = ST.ind; if(!o || (o.k!=='confirm' && o.k!=='rscf')) return h;
   const say = o.k==='confirm' ? 'Requests already in keep their owner and due date.' : o.set==='vt' ? 'Documents already in the vault stay where they are.' : o.set==='sg' ? 'Contracts already sent carry on as they are.' : 'Contracts already waiting carry on as they are.';
   return h.replace(/<div class="cfnote">[\s\S]*?<\/div>/, () => `<div class="cfnote">${say}</div>`); };
+render();
+</script>
+<style>
+/* v39: Routing rules without Due in; rule tables show the name only; new teams */
+#sbody .rth:not(.rs):not(.fd),#sbody .rtr:not(.rs):not(.fd){grid-template-columns:20px minmax(0,2fr) minmax(0,1.1fr) 38px 26px}
+#sbody .rtr .rm b{line-height:22px}
+#sbody .tmt tbody th .tmx{border:0;background:none;color:#b3afa9;cursor:pointer;font-size:11px;margin-left:6px;padding:2px 4px;border-radius:5px}
+#sbody .tmt tbody th .tmx:hover{background:#efeeea;color:#4a4745}
+.ntp{border:1px solid #ecebe7;border-radius:12px;overflow:hidden}
+.ntp button{display:flex;align-items:center;gap:10px;width:100%;border:0;border-top:1px solid #f0efeb;background:#fff;padding:9px 12px;font:inherit;font-size:12.5px;text-align:left;cursor:pointer;color:#201f1e}
+.ntp button:first-child{border-top:0}.ntp button:hover{background:#fbfaf8}
+.ntp .tychk{width:18px;height:18px;border-radius:5px;border:1.5px solid #cfccc5;background:#fff;display:grid;place-items:center;color:#fff;flex:none}
+.ntp .tychk.on{background:#1c2a19;border-color:#1c2a19}.ntp .tychk svg{width:11px;height:11px}
+</style>
+<script>
+/* ===== v39 ===== */
+/* Vault: no file names section */
+const _pgVault39 = PG.vault;
+PG.vault = () => _pgVault39()
+  .replace(/<div class="r[^"]*"><div class="m"><div class="n">File names<\/div>[\s\S]*?<\/select><\/div>/, '')
+  .replace(/<div class="fnc">[\s\S]*?<div class="fnex">[\s\S]*?<\/div><\/div>/, '');
+/* Routing, Approvals and Signing tables: the rule's name only, and Routing without Due in */
+var rmOnly = h => h.replace(/(<span class="rm"><b>[^<]*<\/b>)<small>[\s\S]*?<\/small>/g, '$1');
+const _pgRouting39 = PG.routing, _pgAp39 = PG.approvals, _pgSign39 = PG.sign;
+PG.routing = () => rmOnly(_pgRouting39()).replace('<span>Due in</span>', '').replace(/<span class="rd">[^<]*<\/span>/g, '');
+PG.approvals = () => rmOnly(_pgAp39());
+PG.sign = () => rmOnly(_pgSign39());
+
+/* Teams: create your own, with its permissions; a team you made can be removed once no one is in it */
+const _pgMembers39 = PG.members;
+PG.members = () => { let h = _pgMembers39();
+  if((ST.mtab||'members')==='teams'){
+    h = h.replace(/(<h2 class="t">Members<\/h2><span class="sp"><\/span>)/, `$1${B('+ New team','nt:new','dk sm')}`);
+    TEAMS.forEach(([t,d,custom]) => { if(custom) h = h.replace(`<th>${t}<small>`, () => `<th>${esc(t)}<button class="tmx" data-a="nt:del:${esc(t)}" aria-label="Remove ${esc(t)}" title="Remove team">✕</button><small>`); });
+  }
+  return h; };
+const _ovNt = overlay;
+overlay = function(){ const o = ST.ov; if(!o || o.k!=='newteam') return _ovNt(); const d = o.d;
+  return dlg('New team', 'Pick what people in this team can do.', `
+    <div class="lab">Name</div><input class="in" data-nt="n" value="${esc(d.n)}" placeholder="e.g. Finance">
+    <div class="lab" style="margin-top:14px">Description</div><input class="in" data-nt="desc" value="${esc(d.desc)}" placeholder="e.g. Approves big deals">
+    <div class="lab" style="margin-top:16px">Can</div>
+    <div class="ntp">${PERMS.map((p,j)=>`<button data-a="nt:p:${j}" role="checkbox" aria-checked="${d.p[j]?'true':'false'}"><span class="tychk${d.p[j]?' on':''}">${d.p[j]?ICO_OK:''}</span>${p}</button>`).join('')}</div>`,
+    `${B('Cancel','close')}${B('Create team','nt:save','dk')}`, 460); };
+const _ntAct = act;
+act = function(s){
+  if(!s.startsWith('nt:')) return _ntAct(s);
+  const [, x, y] = s.split(':'), o = ST.ov;
+  if(x==='new'){ ST.ov = {k:'newteam', d:{n:'', desc:'', p:[1,0,0,0,0]}}; return render(); }
+  if(x==='p'){ o.d.p[+y] = o.d.p[+y] ? 0 : 1; return render(); }
+  if(x==='save'){ const n = o.d.n.trim();
+    if(!n || TEAMS.some(t=>t[0].toLowerCase()===n.toLowerCase())){ const el = document.querySelector('[data-nt="n"]'); if(el){ el.focus(); el.style.borderColor='var(--bad)'; } if(n) toast(`There is already a team called ${n}`); return; }
+    TEAMS.push([n, o.d.desc.trim() || 'Your own team', 1]); TPERM[n] = o.d.p.slice(); ST.ov = null; return toast(`${n} created`); }
+  if(x==='del'){ const t = s.slice(7), n = D.members.filter(m=>m[3]===t).length;
+    if(n) return toast(`Move the ${n} ${n===1?'person':'people'} in ${t} to another team first`);
+    const i = TEAMS.findIndex(z=>z[0]===t); if(i>-1) TEAMS.splice(i,1); delete TPERM[t]; return toast(`${t} removed`); }
+  return render(); };
+document.addEventListener('input', ev => { const el = ev.target, k = el.dataset && el.dataset.nt; if(!k || !ST.ov || ST.ov.k!=='newteam') return; ev.stopImmediatePropagation(); ST.ov.d[k] = el.value; el.style.borderColor=''; }, true);
 render();
 </script>
 <style>
